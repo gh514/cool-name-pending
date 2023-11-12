@@ -15,6 +15,8 @@ rule token = parse
     | ('-')         {SUB}
     | ('*')         {MUL}
     | ('/')         {DIV}
+    | ("True")      {TRUE}
+    | ("False")     {FALSE}
     | ("and")       {AND}
     | ("or")        {OR}
     | ("not")       {NOT}
@@ -46,6 +48,7 @@ rule token = parse
     | ("length")    {LENGTH}
     | ("adjacent")  {ADJACENT}
     | (' ')         {SPACE}
+    | eof           {EOF}
     | int_regex     {INT (int_of_string (Lexing.lexeme lexbuf))}
     | var_regex     {VAR (Lexing.lexeme lexbuf)}
     | newline       {token lexbuf}
