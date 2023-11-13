@@ -32,15 +32,11 @@ type unary_op =
   | Neg
   | Not
 
-type expr = 
-  | Integer of loc * int
-  | Boolean of loc * bool
-  | Op of loc * expr * op * expr
-  | Seq of loc * (expr list)
-  | Grid of loc
-  | Dec of loc * data_type * expr
-  | Utils of loc * expr * utilities
-  | Quantifier of loc * quant * expr * expr * expr
+type utilities =
+  | Cells
+  | Value
+  | Size
+  | Length
 
 type quant =
   | ForAll
@@ -51,10 +47,20 @@ type group =
   | Universe
   | Instance of data_type
 
-type utilities =
-  | Cells
-  | Value
-  | Size
-  | Length
+type expr = 
+  | Integer of loc * int
+  | Boolean of loc * bool
+  | Var of loc * var
+  | Op of loc * expr * op * expr
+  | UnaryOp of loc * unary_op * expr
+  | Seq of loc * (expr list)
+  | Grid of loc
+  | Dec of loc * data_type * expr
+  | Utils of loc * expr * utilities
+  | Quantifier of loc * quant * expr * expr * expr
+  | Group of group
+
+
+
 
   
