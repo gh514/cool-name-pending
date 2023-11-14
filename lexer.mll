@@ -2,7 +2,7 @@
 
 {
   open Parser
- 
+  open Lexing 
 
 }
 
@@ -13,6 +13,8 @@ let cell_regex = ['R'] int_regex ['C'] int_regex
 
 rule token = parse
     | ("Grid")      {GRID}
+    | ('R')         {ROW}
+    | ('C')         {COLUMN}
     | ("Cell")      {CELL}
     | ("Set")       {SET}
     | ("Region")    {REGION}
@@ -33,8 +35,8 @@ rule token = parse
     | ("<=")        {LTE}
     | (">=")        {GTE}
     | ("!=")        {UNEQUAL}
-    | ("<-")        {LEFTIMP}
-    | ("->")        {RIGHTIMP}
+    | ("->")        {LEFTIMP}
+    | ("<-")        {RIGHTIMP}
     | ("<->")       {BIIMP}
     | ('(')         {LBRACK}
     | (')')         {RBRACK}

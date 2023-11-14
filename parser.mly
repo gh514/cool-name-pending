@@ -9,7 +9,7 @@ let location = Parsing.symbol_start_pos;;
 %token <int> INT
 %token <string> VAR
 %token TRUE FALSE
-%token GRID CELL SET REGION LINE
+%token GRID CELL SET REGION LINE ROW COLUMN
 %token ADD SUB MUL DIV
 %token AND OR NOT XOR
 %token EQUAL LT GT LTE GTE UNEQUAL
@@ -36,18 +36,19 @@ let location = Parsing.symbol_start_pos;;
 %type <Past.data_type> data_type
 
 %%main:
-    expr_list EOF                       {Past.Seq(location(), $1)}
+    expr_list EOF                           {Past.Seq(location(), $1)}
 
 simple_expr:
-    | TRUE                              {Past.Boolean(location(), true)}
-    | FALSE                             {Past.Boolean(location(), false)}
-    | INT                               {Past.Integer(location(), $1)}
-    | VAR                               {Past.Var(location(), $1)}
-    | GRID                              {Past.Grid(location())}
-    | CELL simple_expr                  {Past.Dec(location(), Past.Cell, $2)}
-    | LINE simple_expr                  {Past.Dec(location(), Past.Line, $2)}
-    | REGION simple_expr                {Past.Dec(location(), Past.Region, $2)}
-    | SET data_type simple_expr              {Past.Dec(location(), Past.Set($2), $3)}
+    | TRUE                                  {Past.Boolean(location(), true)}
+    | FALSE                                 {Past.Boolean(location(), false)}
+    | INT                                   {Past.Integer(location(), $1)}
+    | VAR                                   {Past.Var(location(), $1)}
+    | GRID                                  {Past.Grid(location())}
+    | ROW simple_expr COLUMN simple_expr    {Past.RC(location(), $2, $4)}
+    | CELL simple_expr                      {Past.Dec(location(), Past.Cell, $2)}
+    | LINE simple_expr                      {Past.Dec(location(), Past.Line, $2)}
+    | REGION simple_expr                    {Past.Dec(location(), Past.Region, $2)}
+    | SET data_type simple_expr             {Past.Dec(location(), Past.Set($2), $3)}
 
     
 
@@ -90,5 +91,5 @@ data_type:
     | CELL                          {Past.Cell}
     | REGION                        {Past.Region}
     | LINE                          {Past.Line}
-    | SET data_type                      {Past.Set($2)}
+    | SET data_type                 {Past.Set($2)}
 

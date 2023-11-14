@@ -55,8 +55,8 @@ type expr =
   | Op of expr * op * expr
   | UnaryOp of unary_op * expr
   | Seq of (expr list)
-  | Grid
+  | Grid of int * int
   | Dec of data_type * expr
   | Utils of expr * utilities
   | Quantifier of quant * expr * expr * expr
-  | Group of group
+  
