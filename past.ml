@@ -50,6 +50,7 @@ type group =
 type expr = 
   | Integer of loc * int
   | Boolean of loc * bool
+  | RC of loc * expr * expr
   | Var of loc * var
   | Op of loc * expr * op * expr
   | UnaryOp of loc * unary_op * expr
