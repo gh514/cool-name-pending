@@ -2,8 +2,6 @@
 
 type var = string
 
-type loc = Lexing.position
-
 type op = 
   | Add
   | Sub
@@ -50,7 +48,6 @@ type group =
 type expr = 
   | Integer of int
   | Boolean of bool
-  | RC of expr * expr
   | Var of var
   | Op of expr * op * expr
   | UnaryOp of unary_op * expr

@@ -55,7 +55,7 @@ type expr =
   | Op of loc * expr * op * expr
   | UnaryOp of loc * unary_op * expr
   | Seq of loc * (expr list)
-  | Grid of loc
+  | Grid of loc * int * int
   | Dec of loc * data_type * expr
   | Utils of loc * expr * utilities
   | Quantifier of loc * quant * expr * expr * expr
