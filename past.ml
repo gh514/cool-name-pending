@@ -60,8 +60,10 @@ type expr =
   | Utils of loc * expr * utilities
   | Quantifier of loc * quant * expr * expr * expr
   | Group of group
+  | Assign of loc * expr * expr
+  | List of loc * ((expr * expr) list)
 
-
+(*Line l = [R1C1 to R2C2, R2C2 to R2C3]*)
 
 
   

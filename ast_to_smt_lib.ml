@@ -1,6 +1,6 @@
 
 
-let formula = Ast.Seq([Ast.Grid(1, 1); Ast.Op(Ast.Integer(3), Ast.Equal, Ast.Var("R2C3"))])
+let formula = Ast.Seq([Ast.Grid(5, 5); Ast.Op(Ast.Integer(3), Ast.Equal, Ast.Var("r2c3"))])
 
 let out = Printf.printf
 
@@ -84,15 +84,7 @@ let _ =
   translate formula;
 
 
-let theory_lines = 
-  "
-  (theory Lines
-    : sorts ()
 
-  
-  
-  )
-  "
   
 
     
