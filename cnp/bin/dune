@@ -1,7 +1,7 @@
 (executable
  (public_name cnp)
  (name lang)
- (libraries tlib))
+ (libraries str))
 
 (env
   (dev

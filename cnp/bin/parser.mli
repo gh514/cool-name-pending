@@ -4,6 +4,7 @@ type token =
   | TRUE
   | FALSE
   | GRID
+  | CROSS
   | CELL
   | SET
   | REGION
@@ -44,7 +45,6 @@ type token =
   | SIZE
   | LENGTH
   | ADJACENT
-  | SPACE
   | EOF
 
 val main :

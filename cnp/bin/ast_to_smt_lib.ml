@@ -1,10 +1,10 @@
 
-
+(*
 let formula = Ast.Seq([Ast.Grid(2, 2); Ast.Op(Ast.Boolean(true), Ast.LeftImp, Ast.UnaryOp(Ast.Not, Ast.Var("x")))])
 let pformula = Past.Seq(0, [Past.Grid(0, 2, 2); 
   Past.Op(0, Past.Integer(0, 3), Past.Equal, Past.RC(0, Past.Integer(0, 1), Past.Integer(0, 1)));
   Past.Op(0, Past.Boolean(0, true), Past.BiImp, Past.UnaryOp(0, Past.Not, Past.Var(0, "x")))])
-
+*)
 let out = Printf.printf
 
 let close _ = out ")"
@@ -75,16 +75,17 @@ let rec translate_expr e =
 let translate e =
   out "(set-option :print-success false)\n";
   out "(set-logic AUFLIA)\n";
+  
   match e with
   | Ast.Seq(Ast.Grid (r, c) :: es) -> init_grid r c c; translate_expr (Ast.Seq(es))
   | _ -> out "Puzzle must have grid declaration"; nl ()
 
-
+(*
 let _ = 
   let (e, _) = Past_to_ast.convert pformula []
     in translate e
 
-
+*)
 
   
 

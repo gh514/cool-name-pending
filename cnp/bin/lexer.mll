@@ -4,15 +4,24 @@
   open Parser
   open Lexing 
 
+let next_line lexbuf =
+  let pos = lexbuf.lex_curr_p in
+  lexbuf.lex_curr_p <-
+    { pos with pos_bol = lexbuf.lex_curr_pos;
+               pos_lnum = pos.pos_lnum + 1
+    }
+
 }
 
 let var_regex = ['a'-'z'] ['a'-'z' 'A'-'Z' '0'-'9' '_' ''']*
 let int_regex = ['0'-'9']+
-let newline = ('\010' | "\013\010" )
+let newline = ('\n'|'\r'|"\n\r")
 let cell_regex = ['R'] int_regex ['C'] int_regex
 
 rule token = parse
+    | [' ' '\t']    {token lexbuf}
     | ("Grid")      {GRID}
+    | ('X')         {CROSS}
     | ('R')         {ROW}
     | ('C')         {COLUMN}
     | ("Cell")      {CELL}
@@ -55,8 +64,8 @@ rule token = parse
     | ("size")      {SIZE}
     | ("length")    {LENGTH}
     | ("adjacent")  {ADJACENT}
-    | (' ')         {SPACE}
-    | eof           {EOF}
     | int_regex     {INT (int_of_string (Lexing.lexeme lexbuf))}
     | var_regex     {VAR (Lexing.lexeme lexbuf)}
-    | newline       {token lexbuf}
+    | (newline)     {next_line lexbuf; token lexbuf}
+    | eof           {EOF}
+    | _ as c        {failwith (Printf.sprintf "unexpected character: %C" c)}

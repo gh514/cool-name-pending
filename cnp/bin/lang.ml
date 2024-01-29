@@ -1,20 +1,13 @@
 
 
-let file = "test.txt"
+let file = "test.cnp"
 
+let init_lexbuf file =  
+  let lexbuf = Lexing.from_channel (open_in file)
+  in let _ = lexbuf.lex_curr_p <- { pos_fname = file; pos_lnum = 1; pos_bol = 0; pos_cnum = 0; }
+  in lexbuf
+    
 let _ = 
-
-  let reader = open_in file in
-    try 
-      let lexbuf = Lexing.from_string (input_line reader) in
-        let result = Parser.main Lexer.token lexbuf in
-          
-        print_endline "abc";
-        flush stdout;
-        
-
-        close_in reader;
-    with e ->
-      close_in_noerr reader;
-      raise e
-  
+  let result = Parser.main Lexer.token (init_lexbuf file) in
+    let (past_exp, _) = Past_to_ast.convert result [] in
+    Ast_to_smt_lib.translate past_exp;
