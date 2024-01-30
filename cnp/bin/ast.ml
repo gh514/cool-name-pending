@@ -17,14 +17,16 @@ type op =
   | GTE
   | Unequal
   | LeftImp
-  | RightImp
-  | BiImp
 
 type data_type = 
   | Cell
   | Region
   | Line
   | Set of data_type
+
+type multi_op =
+  | MultiAnd 
+  | MultiOr
 
 type unary_op = 
   | Neg
@@ -51,9 +53,9 @@ type expr =
   | Var of var
   | Op of expr * op * expr
   | UnaryOp of unary_op * expr
+  | MultiOp of multi_op * (expr list)
   | Seq of (expr list)
-  | Grid of int * int
+  | GridDec of int * int
   | Dec of data_type * expr
   | Utils of expr * utilities
-  | Quantifier of quant * expr * expr * expr
   | Group of expr * (expr list)

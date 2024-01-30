@@ -45,9 +45,10 @@ type quant =
 type group = 
   | Grid
   | Universe
-  | Instance of data_type
+  | Instance of expr
 
-type expr = 
+
+and expr = 
   | Integer of loc * int
   | Boolean of loc * bool
   | RC of loc * expr * expr
@@ -55,10 +56,10 @@ type expr =
   | Op of loc * expr * op * expr
   | UnaryOp of loc * unary_op * expr
   | Seq of loc * (expr list)
-  | Grid of loc * int * int
+  | GridDec of loc * int * int
   | Dec of loc * data_type * expr
   | Utils of loc * expr * utilities
-  | Quantifier of loc * quant * expr * expr * expr
+  | Quantifier of loc * quant * expr * group * expr
   | Assign of loc * expr * expr
   | List of loc * ((expr * expr) list)
 

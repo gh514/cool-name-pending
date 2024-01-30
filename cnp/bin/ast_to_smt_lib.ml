@@ -11,28 +11,38 @@ let close _ = out ")"
 
 let nl _ = out "\n"
 
-let translate_op op = 
-  match op with 
-    | Ast.Add -> out "(+" 
-    | Ast.Sub -> out "(-"
-    | Ast.Mul -> out "(*"
-    | Ast.Div -> out "(/"
-    | Ast.And -> out "(and"
-    | Ast.Or -> out "(or"
-    | Ast.Xor -> out "(xor"
-    | Ast.Equal -> out "(="
-    | Ast.LT -> out "(<"
-    | Ast.GT -> out "(>"
-    | Ast.LTE -> out "(<="
-    | Ast.GTE -> out "(>="
-    | Ast.Unequal -> out "(distinct"
-    | Ast.LeftImp -> out "(=>"
-    | _ -> ()
+let depth = ref (-1)
 
-let translate_uop uop = 
-  match uop with
-    | Ast.Neg -> out "(-"
-    | Ast.Not -> out "(not"
+let rec indent n = match n with
+  | 0 -> ()
+  | _ -> out " "; indent (n-1)
+
+let translate_op = function
+  | Ast.Add -> out "(+" 
+  | Ast.Sub -> out "(-"
+  | Ast.Mul -> out "(*"
+  | Ast.Div -> out "(/"
+  | Ast.And -> out "(and"
+  | Ast.Or -> out "(or"
+  | Ast.Xor -> out "(xor"
+  | Ast.Equal -> out "(="
+  | Ast.LT -> out "(<"
+  | Ast.GT -> out "(>"
+  | Ast.LTE -> out "(<="
+  | Ast.GTE -> out "(>="
+  | Ast.Unequal -> out "(distinct"
+  | Ast.LeftImp -> out "(=>"
+  | _ -> ()
+
+let translate_uop = function
+  | Ast.Neg -> out "(-"
+  | Ast.Not -> out "(not"
+
+let translate_mop = function
+  | Ast.MultiAnd -> out "(and"
+  | Ast.MultiOr -> out "(or"
+
+
 (*
 let translate_quantifier q = 
   match q with
@@ -57,7 +67,11 @@ let translate_dec t e =
 let translate_var v =
   out "%s" v
 
-let rec translate_expr e = 
+let rec translate_list = function
+  | e::es -> nl (); indent !depth; translate_expr e; translate_list es
+  | [] -> ()
+
+and translate_expr e = 
   (match e with 
     | Ast.Seq(_) -> ()
     | _ -> out " ");
@@ -66,6 +80,7 @@ let rec translate_expr e =
     | Ast.Boolean b -> out "%b" b
     | Ast.Op (e1, op, e2) -> translate_op op; translate_expr e1; translate_expr e2; close ()
     | Ast.UnaryOp (uop, e) -> translate_uop uop; translate_expr e; close ()
+    | Ast.MultiOp (mop, e) -> depth := !depth+1; translate_mop mop; translate_list e; depth := !depth-1; close ()
     | Ast.Seq (e::es) -> out "(assert"; translate_expr e; close (); nl (); translate_expr (Ast.Seq(es));
 (*    | Ast.Dec (t, e) -> translate_dec t e *)
     | Ast.Var (v) -> translate_var v
@@ -77,8 +92,8 @@ let translate e =
   out "(set-logic AUFLIA)\n";
   
   match e with
-  | Ast.Seq(Ast.Grid (r, c) :: es) -> init_grid r c c; translate_expr (Ast.Seq(es))
-  | _ -> out "Puzzle must have grid declaration"; nl ()
+  | Ast.Seq(Ast.GridDec (r, c) :: es) -> init_grid r c c; translate_expr (Ast.Seq(es))
+| _ -> out "Puzzle must have grid declaration"; nl ()
 
 (*
 let _ = 
