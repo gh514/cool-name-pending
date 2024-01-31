@@ -1,0 +1,31 @@
+# dune exec cnp
+# OCAMLPARAM: unset
+# Shared cache: disabled
+# Shared cache location: /home/user/.cache/dune/db
+# Workspace root: "/home/user/Documents/Computer Science/Part II
+# Project/cool-name-pending/cnp"
+# Auto-detected concurrency: 6
+# Dune context:
+#  { name = "default"
+#  ; kind = "default"
+#  ; profile = Dev
+#  ; merlin = true
+#  ; fdo_target_exe = None
+#  ; build_dir = In_build_dir "default"
+#  ; installed_env =
+#      map
+#        { "INSIDE_DUNE" :
+#            "/home/user/Documents/Computer Science/Part II Project/cool-name-pending/cnp/_build/default"
+#        ; "OCAML_COLOR" : "always"
+#        ; "OPAMCOLOR" : "always"
+#        }
+#  ; instrument_with = []
+#  }
+$ /home/user/.opam/4.11.1/bin/ocamlc.opt -config > /tmp/dune_44c9ef_output
+$ (cd _build/default && /home/user/.opam/4.11.1/bin/ocamldep.opt -modules -impl bin/past.ml) > _build/default/bin/.lang.eobjs/dune__exe__Past.impl.d
+$ (cd _build/default && /home/user/.opam/4.11.1/bin/ocamldep.opt -modules -impl bin/past_to_ast.ml) > _build/default/bin/.lang.eobjs/dune__exe__Past_to_ast.impl.d
+> File "bin/past_to_ast.ml", line 135, characters 0-3:
+> 135 | and translate_quantifier l q d g c vars=
+>       ^^^
+> Error: Syntax error
+[2]

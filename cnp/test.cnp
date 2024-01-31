@@ -1,0 +1,3 @@
+Grid 3X3;
+Forall Cell c in Grid.(
+    Exists Cell b in Grid.(c < b));
