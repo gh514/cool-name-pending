@@ -71,6 +71,16 @@ let cell_grid l =
     | _, _ -> Past.Var(l, sprintf "r%ic%i" r c) :: (loop r (c-1))
   in List.rev (loop m n)
 
+let bool_grid l reg =
+  let m = !gridr in
+  let n = !gridc in
+  let rec loop r c =
+    match r, c with
+    | 0, _ -> []
+    | _, 0 -> loop (r-1) n
+    | _, _ -> Past.Var(l, sprintf "r%ic%i_in_%s" r c reg) :: (loop r (c-1))
+  in List.rev (loop m n)
+
 let bool_field = 
   let m = !gridr in
   let n = !gridc in
@@ -80,7 +90,7 @@ let bool_field =
      (r-1, c+1); (r-1, c); (r-1, c-1)] in
   
   let create_vars r c =
-    List.map (fun (rs, cs) -> Ast.Var(Printf.sprintf"r%ic%iTor%ic%i" r c rs cs))
+    List.map (fun (rs, cs) -> Ast.Var(sprintf"r%ic%iTor%ic%i" r c rs cs))
       (List.filter (fun (r, c) -> r >= 1 && r <= m && c >= 1 && c<=n) (surrounding r c)) in
 
   let rec loop r c =
@@ -90,15 +100,18 @@ let bool_field =
     | _, _ -> (create_vars r c) @ (loop r (c-1))
   in List.rev (loop m n)
 
-
+(*
 let translate_list l = 
   let rec loop = function
     | (Past.RC(_, r1, c1), Past.RC(_, r2, c2))::es -> 
-      Ast.Op(Ast.Var(sprintf "r%ic%iTor%ic%i" (get_int r1) (get_int c1) (get_int r2) (get_int c2)), Ast.Equal, Ast.Boolean(true))
+      Ast.Var(sprintf "r%ic%iTor%ic%i" (get_int r1) (get_int c1) (get_int r2) (get_int c2))
       :: loop es
     | [] -> []
     | _ -> raise (Err "Some list thing")
   in loop l
+*)
+
+
 
 let rec translate_seq s vars =
   let var = ref [] in
@@ -118,17 +131,20 @@ and translate_unary_term uop e vars =
   match translate_expr e vars with
   | (e, _) -> (Ast.UnaryOp(translate_unary_op uop, e), vars)
 
-(*
-and translate_dec d =
+
+and translate_dec d e vars = 
   match d with
-  | Past.Dec(_, Past.Cell, e) -> get_var e
+  | Past.Cell -> raise (Err "Cannot declare Cell")
+  | Past.Region -> let (v, nvars) = translate_expr e vars in
+    let field = bool_grid (get_var v)
+    (Ast.Group(v))
 
-
+  (*
   | Past.Line -> let ex = translate_expr e vars in
     match ex with 
     | (v, vs) -> let field = bool_field !gridc !gridr in  
       (Ast.Group(v, field), (v, Some field) :: vs)
-    | _ -> raise (Err "Dec error")
+    | _ -> raise (Err "Line declaration error")
 *)
     
 and translate_quantifier l q d g c vars=
@@ -156,7 +172,7 @@ and translate_expr e vars =
   | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e vars
   | Past.Seq(_, e) -> translate_seq e vars
   | Past.GridDec(_, r, c) -> gridr := r; gridc := c; (Ast.GridDec(r, c), vars)
-(*  | Past.Dec(_, d, e) -> translate_dec d e vars   *)
+  | Past.Dec(_, d, v) -> translate_dec d v vars   
   | Past.List(_, es) -> (Ast.Seq(translate_list es), vars)
   | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c vars
 

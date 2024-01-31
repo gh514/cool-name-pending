@@ -66,6 +66,9 @@ dec:
 group:
     | GRID                                  {Past.Grid}
 
+list:
+    | simple_expr                           {[$1]}
+    | simple_expr COMMA list                {$1::$3}    
 
 expr:
     | simple_expr POINT CELLS               {Past.Utils(location(), $1, Past.Cells)}
@@ -92,7 +95,7 @@ expr:
     | expr LEFTIMP expr                     {Past.Op(location(), $1, Past.LeftImp, $3)}
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
-
+    | LSBRACK list RSBRACK                  {Past.List(location(), $2)}
     | FORALL dec IN group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), Past.ForAll, $2, $4, $7)}
     | EXISTS dec IN group POINT LBRACK expr RBRACK

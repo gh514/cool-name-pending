@@ -61,7 +61,7 @@ and expr =
   | Utils of loc * expr * utilities
   | Quantifier of loc * quant * expr * group * expr
   | Assign of loc * expr * expr
-  | List of loc * ((expr * expr) list)
+  | List of loc * (expr list)
 
 (*Line l = [R1C1 to R2C2, R2C2 to R2C3]*)
 

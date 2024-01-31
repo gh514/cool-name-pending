@@ -43,13 +43,6 @@ let translate_mop = function
   | Ast.MultiOr -> out "(or"
 
 
-(*
-let translate_quantifier q = 
-  match q with
-    | Ast.ForAll -> out "(forall "
-    | Ast.Exists -> out "(exists "
-    *)
-
 let rec init_grid r c m =
   if c = 0 then 
     if r = 1 then ()
