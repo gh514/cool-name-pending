@@ -28,30 +28,30 @@ let location = Parsing.symbol_start_pos;;
 %token ADJACENT
 %token EOF
 
-%left ADD SUB AND
-%left MUL DIV OR XOR
-%left EQUAL LT GT LTE GTE UNEQUAL NOT
-%left LEFTIMP RIGHTIMP
 %left BIIMP
+%left LEFTIMP RIGHTIMP
+%left EQUAL LT GT LTE GTE UNEQUAL NOT
+%left MUL DIV OR XOR
+%left ADD SUB AND
 
 %nonassoc LBRACK RBRACK LSBRACK RSBRACK
 
 %start main
-%type <Past.expr> main
+%type <((Lexing.position * int * int) * Past.expr list)> main
 %type <Past.expr> simple_expr
 %type <Past.expr> expr
 %type <Past.expr list> expr_list
 %type <Past.data_type> data_type
 
 %%main:
-    | expr_list EOF                         {Past.Seq(location(), $1)}
+    | init expr_list EOF                    {($1, $2)}
+    | init EOF                              {($1, [])}
 
 simple_expr:
     | TRUE                                  {Past.Boolean(location(), true)}
     | FALSE                                 {Past.Boolean(location(), false)}
     | INT                                   {Past.Integer(location(), $1)}
     | VAR                                   {Past.Var(location(), $1)}
-    | GRID INT CROSS INT                    {Past.GridDec(location(), $2, $4)}
     | ROW simple_expr COLUMN simple_expr    {Past.RC(location(), $2, $4)}
     | CELL simple_expr                      {Past.Dec(location(), Past.Cell, $2)}
     | LINE simple_expr                      {Past.Dec(location(), Past.Line, $2)}
@@ -59,12 +59,13 @@ simple_expr:
     | SET data_type simple_expr             {Past.Dec(location(), Past.Set($2), $3)}
 
 dec:
-    | CELL simple_expr                              {Past.Dec(location(), Past.Cell, $2)}
-    | REGION simple_expr                            {Past.Dec(location(), Past.Region, $2)}
-    | LINE simple_expr                             {Past.Dec(location(), Past.Line, $2)}
+    | CELL simple_expr                      {Past.Dec(location(), Past.Cell, $2)}
+    | REGION simple_expr                    {Past.Dec(location(), Past.Region, $2)}
+    | LINE simple_expr                      {Past.Dec(location(), Past.Line, $2)}
 
 group:
     | GRID                                  {Past.Grid}
+    | LSBRACK list RSBRACK                  {Past.Instance(Past.List(location(), $2))}
 
 list:
     | simple_expr                           {[$1]}
@@ -95,21 +96,23 @@ expr:
     | expr LEFTIMP expr                     {Past.Op(location(), $1, Past.LeftImp, $3)}
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
-    | LSBRACK list RSBRACK                  {Past.List(location(), $2)}
     | FORALL dec IN group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), Past.ForAll, $2, $4, $7)}
     | EXISTS dec IN group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), Past.Exists, $2, $4, $7)}
 
+init:
+    | GRID INT CROSS INT                    {(location(), $2, $4)}
+    | init SEMICOLON                        {$1}
 
 expr_list:
-    | expr                          {[$1]}
-    | expr SEMICOLON expr_list      {$1::$3}
-    | expr SEMICOLON                {[$1]}   
+    | expr                                  {[$1]}
+    | expr SEMICOLON                        {[$1]}   
+    | expr SEMICOLON expr_list              {$1::$3}
 
 data_type:
-    | CELL                          {Past.Cell}
-    | REGION                        {Past.Region}
-    | LINE                          {Past.Line}
-    | SET data_type                 {Past.Set($2)}
+    | CELL                                  {Past.Cell}
+    | REGION                                {Past.Region}
+    | LINE                                  {Past.Line}
+    | SET data_type                         {Past.Set($2)}
 

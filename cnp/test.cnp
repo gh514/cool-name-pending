@@ -1,3 +1,4 @@
 Grid 3X3;
-Forall Cell c in Grid.(
-    Exists Cell b in Grid.(c < b));
+Forall Cell c in [R1C3, R2C2].(
+    Exists Cell b in Grid.(c*b>5)
+);

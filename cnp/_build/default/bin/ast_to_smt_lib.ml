@@ -4,7 +4,12 @@ let formula = Ast.Seq([Ast.Grid(2, 2); Ast.Op(Ast.Boolean(true), Ast.LeftImp, As
 let pformula = Past.Seq(0, [Past.Grid(0, 2, 2); 
   Past.Op(0, Past.Integer(0, 3), Past.Equal, Past.RC(0, Past.Integer(0, 1), Past.Integer(0, 1)));
   Past.Op(0, Past.Boolean(0, true), Past.BiImp, Past.UnaryOp(0, Past.Not, Past.Var(0, "x")))])
+
+
+let formula = [Ast.GridDec(2, 2); Ast.Group(Ast.Var("r"), 
+  [Ast.Var("r1c1_in_r"); Ast.Var("r1c2_in_r"); Ast.Var("r2c1_in_r"); Ast.Var("r2c2_in_r")])]
 *)
+
 let out = Printf.printf
 
 let close _ = out ")"
@@ -64,36 +69,48 @@ let rec translate_list = function
   | e::es -> nl (); indent !depth; translate_expr e; translate_list es
   | [] -> ()
 
+and translate_group = function
+  | e::es -> out "(declare-const"; translate_expr e; out " Bool)\n"; translate_group es
+  | [] -> ()
+
 and translate_expr e = 
-  (match e with 
-    | Ast.Seq(_) -> ()
-    | _ -> out " ");
+  (match e with
+    | Ast.Group(_, _) -> ()
+    | _ ->  out " ");
   match e with 
-    | Ast.Integer i -> out "%d" i
-    | Ast.Boolean b -> out "%b" b
-    | Ast.Op (e1, op, e2) -> translate_op op; translate_expr e1; translate_expr e2; close ()
-    | Ast.UnaryOp (uop, e) -> translate_uop uop; translate_expr e; close ()
-    | Ast.MultiOp (mop, e) -> depth := !depth+1; translate_mop mop; translate_list e; depth := !depth-1; close ()
-    | Ast.Seq (e::es) -> out "(assert"; translate_expr e; close (); nl (); translate_expr (Ast.Seq(es));
+    | Ast.Integer(i)-> out "%d" i
+    | Ast.Boolean(b) -> out "%b" b
+    | Ast.Op(e1, op, e2) -> translate_op op; translate_expr e1; translate_expr e2; close ()
+    | Ast.UnaryOp(uop, e) -> translate_uop uop; translate_expr e; close ()
+    | Ast.MultiOp(mop, e) -> depth := !depth+1; translate_mop mop; translate_list e; depth := !depth-1; close ()
 (*    | Ast.Dec (t, e) -> translate_dec t e *)
-    | Ast.Var (v) -> translate_var v
+    | Ast.Var(v) -> translate_var v
+    | Ast.Group(e, es) -> translate_group es
     | _ -> ()
 
 
-let translate e =
+let translate p =
   out "(set-option :print-success false)\n";
-  out "(set-logic AUFLIA)\n";
-  
-  match e with
-  | Ast.Seq(Ast.GridDec (r, c) :: es) -> init_grid r c c; translate_expr (Ast.Seq(es))
-| _ -> out "Puzzle must have grid declaration"; nl ()
+  out "(set-logic AUFLIA)\n\n";
+
+  match p with
+    | ((r, c), xs) -> init_grid r c c; nl();
+      let rec loop = function
+        | e::es -> (match e with
+          | Ast.Group(_, _) -> nl(); translate_expr e; nl(); loop es
+          | _ ->  out "(assert"; translate_expr e; close(); nl(); loop es)
+        | [] -> ()
+      in loop xs
+    | _ -> out "Puzzle must begin with grid declaration"; nl ();
 
 (*
 let _ = 
+  translate formula
+
   let (e, _) = Past_to_ast.convert pformula []
     in translate e
-
 *)
+
 
   
 

@@ -7,11 +7,18 @@ let init_lexbuf file =
   in let _ = lexbuf.lex_curr_p <- { pos_fname = file; pos_lnum = 1; pos_bol = 0; pos_cnum = 0; }
   in lexbuf
     
+  (*
+let p = [Past.GridDec(0, 3, 3); Past.Quantifier(0, Past.ForAll,
+  Past.Dec(0, Past.Cell, Past.Var(0, "c")), Past.Grid, Past.Var(0, "c"))]
+
+
+let p = [Past.GridDec(0, 3, 3); Past.Op(0, Past.Var(0, "x"), Past.Add, Past.Integer(0, 4))]
+*)
 
 let _ = 
-let result = Parser.main Lexer.token (init_lexbuf file) in
-  let (past_exp, _) = Past_to_ast.convert result in
-    Ast_to_smt_lib.translate past_exp;
+  let past_puzzle = Parser.main Lexer.token (init_lexbuf file) in
+    let ast_puzzle = Past_to_ast.convert past_puzzle in
+      Ast_to_smt_lib.translate ast_puzzle;
 
 (*
 let pformula = Past.Seq(0, [Past.GridDec(0, 2, 2); 

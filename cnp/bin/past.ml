@@ -47,7 +47,6 @@ type group =
   | Universe
   | Instance of expr
 
-
 and expr = 
   | Integer of loc * int
   | Boolean of loc * bool
@@ -56,7 +55,6 @@ and expr =
   | Op of loc * expr * op * expr
   | UnaryOp of loc * unary_op * expr
   | Seq of loc * (expr list)
-  | GridDec of loc * int * int
   | Dec of loc * data_type * expr
   | Utils of loc * expr * utilities
   | Quantifier of loc * quant * expr * group * expr
