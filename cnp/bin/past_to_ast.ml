@@ -7,8 +7,6 @@ exception Err of string
 let gridr = ref 0
 let gridc = ref 0
 
-
-
 let translate_op = function
   | Past.Add -> Ast.Add
   | Past.Sub -> Ast.Sub
@@ -42,9 +40,6 @@ let get_var = function
   | Past.Var(_, v) -> v
   | _ -> raise (Err "Incorrect expression, Var expected")
 
-let translate_rc r c = 
-  Ast.Var(sprintf "r%ic%i" (get_int r) (get_int c))
-
 let rec substitute var_new var_old expr =
   match expr with
   | Past.Var(l, v) -> if v = var_old then Past.Var(l, var_new) else Past.Var(l, v)
@@ -52,9 +47,6 @@ let rec substitute var_new var_old expr =
   | Past.UnaryOp(l, uop, e) -> Past.UnaryOp(l, uop, substitute var_new var_old e)
   | Past.Quantifier(l, q, d, g, e) -> Past.Quantifier(l, q, d, g, substitute var_new var_old e)
   | e -> e
-
-let apply_forall vars v_old c =
-  List.map (fun v -> substitute v v_old c) vars
 
 let cell_grid l = 
   let m = !gridr in
@@ -103,20 +95,23 @@ let translate_list xs =
     | _ -> raise (Err "Some list thing")
   in loop xs
 
-let rec translate_term e1 op e2 =
-  let expr1 = translate_expr e1 in
-  let expr2 = translate_expr e2 in
-  Ast.Op(expr1, translate_op op, expr2)
+let rec translate_term e1 op e2 vars =
+  let (expr1, _) = translate_expr e1 vars in
+  let (expr2, _) = translate_expr e2 vars in
+  (Ast.Op(expr1, translate_op op, expr2), vars)
 
-and translate_unary_term uop e =
-  let expr = translate_expr e in Ast.UnaryOp(translate_unary_op uop, expr)
+and translate_unary_term uop e vars =
+  let (expr, _) = translate_expr e vars in
+  (Ast.UnaryOp(translate_unary_op uop, expr), vars)
 
-
-and translate_dec d e = 
+and translate_dec d e v vars = 
+  let (ne, _) = translate_expr e vars in
   match d with
+  | Past.Int -> (Ast.Dec(Ast.Int, ne), (Past.Int, ne, None)::vars)
   | Past.Cell -> raise (Err "Cannot declare Cell")
-  | Past.Region -> let v = translate_expr e in
-    let field = bool_grid (get_var e) in Ast.Group(v, field)
+  | Past.Region -> let grid = bool_grid (get_var e) in 
+    (Ast.Dec(Ast.Region, Ast.Group(ne, grid)), (Past.Region, ne, Some grid)::vars)
+  | _ -> raise (Err "Unimplemented datatype")
 
   (*
   | Past.Line -> let ex = translate_expr e vars in
@@ -132,39 +127,41 @@ and translate_group l g = match g with
     (match e with
       | Past.List(_, es) -> translate_list es)
     
-and translate_quantifier l q d g c =
+and translate_quantifier l q d g c vars =
   let op = ref Ast.MultiAnd in
   (match q with
     | Past.ForAll -> ()
     | Past.Exists -> op := Ast.MultiOr);
   match d with
-    | Past.Dec(_, Past.Cell, var) -> 
-        Ast.MultiOp(!op, (List.map (fun v -> 
-          translate_expr (substitute (get_var v) (get_var var) c)) (translate_group l g)))
+    | Past.Dec(_, Past.Cell, var, _) -> 
+        (Ast.MultiOp(!op, (List.map (fun v -> let (expr, _) = 
+          translate_expr (substitute (get_var v) (get_var var) c) vars in
+          expr) (translate_group l g))), vars)
   
-        
-and translate_expr e = 
+and translate_expr e vars = 
   match e with
-  | Past.Integer(_, n) -> Ast.Integer(n)
-  | Past.Boolean(_, b) -> Ast.Boolean(b)
-  | Past.RC(_, r, c) -> translate_rc r c
-  | Past.Var(_, v) -> Ast.Var(v)
+  | Past.Integer(_, n) -> (Ast.Integer(n), vars)
+  | Past.Boolean(_, b) -> (Ast.Boolean(b), vars)
+  | Past.RC(_, r, c) -> (Ast.Var(sprintf "r%ic%i" (get_int r) (get_int c)), vars)
+  | Past.Var(_, v) -> (Ast.Var(v), vars)
   | Past.Op(_, e1, op, e2) -> 
     (match op with
-    | Past.RightImp -> translate_term e2 Past.LeftImp e1
-    | Past.BiImp -> translate_term e1 Past.Equal e2
-    | _ -> translate_term e1 op e2)
-  | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e
-  | Past.Dec(_, d, e) -> translate_dec d e
-  | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c
+    | Past.RightImp -> translate_term e2 Past.LeftImp e1 vars
+    | Past.BiImp -> translate_term e1 Past.Equal e2 vars
+    | _ -> translate_term e1 op e2 vars)
+  | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e vars
+  | Past.Dec(_, d, e, v) -> translate_dec d e v vars
+  | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c vars
 
-let rec convert = function
+let convert = function
   | ((_, r, c), xs) -> gridr := r; gridc := c;
-    let rec loop = function
-      | e::es -> (translate_expr e) :: (loop es)
+    let rec loop exprs vars = 
+      match exprs with
+      | e::es -> let (expr, nvars) = translate_expr e vars in
+        expr :: (loop es nvars)
       | [] -> []
-    in ((r, c), loop xs) 
-  | (_, _) -> raise (Err "Puzzle requires grid declaration")
+    in ((r, c), loop xs []) 
+  
 
 (*
 let rec flatten = function

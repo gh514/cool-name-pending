@@ -28,6 +28,8 @@ rule token = parse
     | ("Set")       {SET}
     | ("Region")    {REGION}
     | ("Line")      {LINE}
+    | ("Int")       {INTDEC}
+    | ("Bool")      {BOOLDEC}
     | ('+')         {ADD}
     | ('-')         {SUB}
     | ('*')         {MUL}

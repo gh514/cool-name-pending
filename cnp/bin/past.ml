@@ -23,6 +23,8 @@ type op =
   | BiImp
 
 type data_type = 
+  | Int
+  | Bool
   | Cell
   | Region
   | Line
@@ -55,11 +57,12 @@ and expr =
   | Op of loc * expr * op * expr
   | UnaryOp of loc * unary_op * expr
   | Seq of loc * (expr list)
-  | Dec of loc * data_type * expr
+  | Dec of loc * data_type * expr * (expr option)
   | Utils of loc * expr * utilities
   | Quantifier of loc * quant * expr * group * expr
   | Assign of loc * expr * expr
   | List of loc * (expr list)
+  | Group of loc * group
 
 (*Line l = [R1C1 to R2C2, R2C2 to R2C3]*)
 

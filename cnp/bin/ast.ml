@@ -19,6 +19,8 @@ type op =
   | LeftImp
 
 type data_type = 
+  | Int
+  | Bool
   | Cell
   | Region
   | Line
@@ -57,3 +59,4 @@ type expr =
   | Dec of data_type * expr
   | Utils of expr * utilities
   | Group of expr * (expr list)
+  | Bundle of expr list
