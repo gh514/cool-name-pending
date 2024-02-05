@@ -1,1 +1,1 @@
-bin/past_to_ast.ml: Ast List Past Printf
+bin/past_to_ast.ml: Ast List Past Printf Str

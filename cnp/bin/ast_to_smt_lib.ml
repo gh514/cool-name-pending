@@ -64,7 +64,7 @@ let rec translate_dec dt e =
   | Ast.Bool -> out "\n(declare-const"; translate_expr e; out " Bool)"
   | Ast.Cell -> raise (Err "Type Ast.Cell should not be possible")
   | Ast.Region -> match e with
-    | Ast.Group(_, field) -> translate_group field
+    | Ast.Group(field) -> translate_group field
 
 
 and translate_list = function
@@ -72,12 +72,17 @@ and translate_list = function
   | [] -> ()
 
 and translate_group = function
-  | e::es -> out "\n(declare-const"; translate_expr e; out " Bool)"; translate_group es
+  | e::es -> translate_expr e; translate_group es
+  | [] -> ()
+
+and translate_bundle = function
+  | e::es -> translate_expr e; translate_bundle es
   | [] -> ()
 
 and translate_expr e = 
   (match e with
-    | Ast.Group(_, _) -> ()
+    | Ast.Group(_) -> ()
+    | Ast.Bundle(_) -> ()
     | _ ->  out " ");
   match e with 
     | Ast.Integer(i)-> out "%d" i
@@ -87,9 +92,9 @@ and translate_expr e =
     | Ast.MultiOp(mop, e) -> depth := !depth+1; translate_mop mop; translate_list e; depth := !depth-1; close ()
     | Ast.Var(v) -> out "%s" v
     | Ast.Dec(dt, e) -> translate_dec dt e
-    | Ast.Group(e, es) -> translate_group es
+    | Ast.Group(es) -> translate_group es
+    | Ast.Bundle(es) -> translate_bundle es
     | _ -> ()
-
 
 let translate p =
   out "(set-option :print-success false)\n";
@@ -99,8 +104,9 @@ let translate p =
     | ((r, c), xs) -> init_grid r c c;
       let rec loop = function
         | e::es -> (match e with
-          | Ast.Group(_, _) -> nl(); translate_expr e; loop es
+          | Ast.Group(_) -> nl(); translate_expr e; loop es
           | Ast.Dec(_, _) -> nl(); translate_expr e; loop es
+          | Ast.Bundle(_) -> nl(); translate_expr e; loop es
           | _ ->  out "\n\n(assert"; translate_expr e; close(); loop es)
         | [] -> ()
       in loop xs; out "\n\n(check-sat)\n"

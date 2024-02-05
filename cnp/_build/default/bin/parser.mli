@@ -11,6 +11,8 @@ type token =
   | LINE
   | ROW
   | COLUMN
+  | INTDEC
+  | BOOLDEC
   | ADD
   | SUB
   | MUL

@@ -28,6 +28,7 @@ let location = Parsing.symbol_start_pos;;
 %token ADJACENT
 %token EOF
 
+%left ADJACENT
 %left BIIMP
 %left LEFTIMP RIGHTIMP
 %left LT GT LTE GTE UNEQUAL NOT
@@ -104,10 +105,15 @@ expr:
     | expr LEFTIMP expr                     {Past.Op(location(), $1, Past.LeftImp, $3)}
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
+    | VAR ADJACENT VAR                      {Past.RegionOp(location(), $1, Past.Adjacent, $3)}
     | FORALL dec IN group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), Past.ForAll, $2, $4, $7)}
     | EXISTS dec IN group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), Past.Exists, $2, $4, $7)}
+    | FORALL dec POINT LBRACK expr RBRACK
+                                            {Past.Quantifier(location(), Past.ForAll, $2, Past.Grid, $5)}
+    | EXISTS dec POINT LBRACK expr RBRACK
+                                            {Past.Quantifier(location(), Past.Exists, $2, Past.Grid, $5)}
 
 init:
     | GRID INT CROSS INT                    {(location(), $2, $4)}

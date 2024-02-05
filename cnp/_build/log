@@ -21,123 +21,121 @@
 #        }
 #  ; instrument_with = []
 #  }
-$ /home/user/.opam/4.11.1/bin/ocamlc.opt -config > /tmp/dune_22d8b0_output
+$ /home/user/.opam/4.11.1/bin/ocamlc.opt -config > /tmp/dune_f4147e_output
 $ (cd _build/default && /home/user/.opam/4.11.1/bin/ocamldep.opt -modules -impl bin/past_to_ast.ml) > _build/default/bin/.lang.eobjs/dune__exe__Past_to_ast.impl.d
 $ (cd _build/default && /home/user/.opam/4.11.1/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -warn-error -A -g -bin-annot -I bin/.lang.eobjs/byte -no-alias-deps -opaque -open Dune__exe -o bin/.lang.eobjs/byte/dune__exe__Past_to_ast.cmo -c -impl bin/past_to_ast.ml)
-> File "bin/past_to_ast.ml", lines 116-119, characters 2-60:
-> 116 | ..match d with
-> 117 |   | Past.Cell -> raise (Err "Cannot declare Cell")
-> 118 |   | Past.Region -> let v = translate_expr e in
-> 119 |     let field = bool_grid (get_var e) in Ast.Group(v, field)
-> Warning 8: this pattern-matching is not exhaustive.
-> Here is an example of a case that is not matched:
-> (Line|Set _)
-> File "bin/past_to_ast.ml", lines 132-133, characters 4-46:
-> 132 | ....(match e with
-> 133 |       | Past.List(_, es) -> translate_list es)
+> File "bin/past_to_ast.ml", lines 167-168, characters 4-46:
+> 167 | ....(match e with
+> 168 |       | Past.List(_, es) -> translate_list es)
 > Warning 8: this pattern-matching is not exhaustive.
 > Here is an example of a case that is not matched:
 > (Integer (_, _)|Boolean (_, _)|RC (_, _, _)|Var (_, _)|Op (_, _, _, _)|
-> UnaryOp (_, _, _)|Seq (_, _)|Dec (_, _, _)|Utils (_, _, _)|
-> Quantifier (_, _, _, _, _)|Assign (_, _, _))
-> File "bin/past_to_ast.ml", lines 129-133, characters 26-46:
-> 129 | ..........................match g with
-> 130 |   | Past.Grid -> cell_grid l
-> 131 |   | Past.Instance(e) ->
-> 132 |     (match e with
-> 133 |       | Past.List(_, es) -> translate_list es)
+> UnaryOp (_, _, _)|Seq (_, _)|Dec (_, _, _, _)|Utils (_, _, _)|
+> Quantifier (_, _, _, _, _)|Assign (_, _, _)|Group (_, _))
+> File "bin/past_to_ast.ml", lines 164-168, characters 26-46:
+> 164 | ..........................match g with
+> 165 |   | Past.Grid -> cell_grid l
+> 166 |   | Past.Instance(e) ->
+> 167 |     (match e with
+> 168 |       | Past.List(_, es) -> translate_list es)
 > Warning 8: this pattern-matching is not exhaustive.
 > Here is an example of a case that is not matched:
 > Universe
-> File "bin/past_to_ast.ml", lines 140-143, characters 2-90:
-> 140 | ..match d with
-> 141 |     | Past.Dec(_, Past.Cell, var) -> 
-> 142 |         Ast.MultiOp(!op, (List.map (fun v -> 
-> 143 |           translate_expr (substitute (get_var v) (get_var var) c)) (translate_group l g)))
-> Warning 8: this pattern-matching is not exhaustive.
-> Here is an example of a case that is not matched:
-> (Dec (_, (Region|Line|Set _), _)|Integer (_, _)|Boolean (_, _)|RC (_, _, _)|
-> Var (_, _)|Op (_, _, _, _)|UnaryOp (_, _, _)|Seq (_, _)|Utils (_, _, _)|
-> Quantifier (_, _, _, _, _)|Assign (_, _, _)|List (_, _))
-> File "bin/past_to_ast.ml", lines 147-159, characters 2-68:
-> 147 | ..match e with
-> 148 |   | Past.Integer(_, n) -> Ast.Integer(n)
-> 149 |   | Past.Boolean(_, b) -> Ast.Boolean(b)
-> 150 |   | Past.RC(_, r, c) -> translate_rc r c
-> 151 |   | Past.Var(_, v) -> Ast.Var(v)
+> File "bin/past_to_ast.ml", lines 171-183, characters 2-32:
+> 171 | ..match d with
+> 172 |     | Past.Dec(_, Past.Cell, var, _) -> 
+> 173 |       let op = match q with
+> 174 |         | Past.ForAll -> Ast.MultiAnd
+> 175 |         | Past.Exists -> Ast.MultiOr
 > ...
-> 156 |     | _ -> translate_term e1 op e2)
-> 157 |   | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e
-> 158 |   | Past.Dec(_, d, e) -> translate_dec d e
-> 159 |   | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c
+> 180 |     | Past.Dec(_, Past.Region, var, _) -> 
+> 181 |       let (e1, v1) = translate_expr d vars in
+> 182 |       let (e2, v2) = translate_expr c v1 in
+> 183 |       (Ast.Bundle([e1; e2]), v2)
 > Warning 8: this pattern-matching is not exhaustive.
 > Here is an example of a case that is not matched:
-> (Seq (_, _)|Utils (_, _, _)|Assign (_, _, _)|List (_, _))
-> File "bin/past_to_ast.ml", line 167, characters 4-10:
-> 167 |   | (_, _) -> raise (Err "Puzzle requires grid declaration")
->           ^^^^^^
-> Warning 11: this match case is unused.
-> File "bin/past_to_ast.ml", line 161, characters 8-15:
-> 161 | let rec convert = function
->               ^^^^^^^
-> Warning 39: unused rec flag.
+> (Dec (_, (Int|Bool|Line|Set _), _, _)|Integer (_, _)|Boolean (_, _)|
+> RC (_, _, _)|Var (_, _)|Op (_, _, _, _)|UnaryOp (_, _, _)|Seq (_, _)|
+> Utils (_, _, _)|Quantifier (_, _, _, _, _)|Assign (_, _, _)|List (_, _)|
+> Group (_, _))
+> File "bin/past_to_ast.ml", lines 187-199, characters 2-73:
+> 187 | ..match e with
+> 188 |   | Past.Integer(_, n) -> (Ast.Integer(n), vars)
+> 189 |   | Past.Boolean(_, b) -> (Ast.Boolean(b), vars)
+> 190 |   | Past.RC(_, r, c) -> (Ast.Var(sprintf "r%ic%i" (get_int r) (get_int c)), vars)
+> 191 |   | Past.Var(_, v) -> (Ast.Var(v), vars)
+> ...
+> 196 |     | _ -> translate_term e1 op e2 vars)
+> 197 |   | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e vars
+> 198 |   | Past.Dec(_, d, e, v) -> translate_dec d e v vars
+> 199 |   | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c vars
+> Warning 8: this pattern-matching is not exhaustive.
+> Here is an example of a case that is not matched:
+> (Seq (_, _)|Utils (_, _, _)|Assign (_, _, _)|List (_, _)|Group (_, _))
+> File "bin/past_to_ast.ml", line 131, characters 22-23:
+> 131 | and translate_dec d e v vars = 
+>                             ^
+> Warning 27: unused variable v.
+> File "bin/past_to_ast.ml", line 180, characters 31-34:
+> 180 |     | Past.Dec(_, Past.Region, var, _) -> 
+>                                      ^^^
+> Warning 27: unused variable var.
 $ (cd _build/default && /home/user/.opam/4.11.1/bin/ocamlopt.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -warn-error -A -g -I bin/.lang.eobjs/byte -I bin/.lang.eobjs/native -intf-suffix .ml -no-alias-deps -opaque -open Dune__exe -o bin/.lang.eobjs/native/dune__exe__Lang.cmx -c -impl bin/lang.ml)
 $ (cd _build/default && /home/user/.opam/4.11.1/bin/ocamlopt.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -warn-error -A -g -I bin/.lang.eobjs/byte -I bin/.lang.eobjs/native -intf-suffix .ml -no-alias-deps -opaque -open Dune__exe -o bin/.lang.eobjs/native/dune__exe__Past_to_ast.cmx -c -impl bin/past_to_ast.ml)
-> File "bin/past_to_ast.ml", lines 116-119, characters 2-60:
-> 116 | ..match d with
-> 117 |   | Past.Cell -> raise (Err "Cannot declare Cell")
-> 118 |   | Past.Region -> let v = translate_expr e in
-> 119 |     let field = bool_grid (get_var e) in Ast.Group(v, field)
-> Warning 8: this pattern-matching is not exhaustive.
-> Here is an example of a case that is not matched:
-> (Line|Set _)
-> File "bin/past_to_ast.ml", lines 132-133, characters 4-46:
-> 132 | ....(match e with
-> 133 |       | Past.List(_, es) -> translate_list es)
+> File "bin/past_to_ast.ml", lines 167-168, characters 4-46:
+> 167 | ....(match e with
+> 168 |       | Past.List(_, es) -> translate_list es)
 > Warning 8: this pattern-matching is not exhaustive.
 > Here is an example of a case that is not matched:
 > (Integer (_, _)|Boolean (_, _)|RC (_, _, _)|Var (_, _)|Op (_, _, _, _)|
-> UnaryOp (_, _, _)|Seq (_, _)|Dec (_, _, _)|Utils (_, _, _)|
-> Quantifier (_, _, _, _, _)|Assign (_, _, _))
-> File "bin/past_to_ast.ml", lines 129-133, characters 26-46:
-> 129 | ..........................match g with
-> 130 |   | Past.Grid -> cell_grid l
-> 131 |   | Past.Instance(e) ->
-> 132 |     (match e with
-> 133 |       | Past.List(_, es) -> translate_list es)
+> UnaryOp (_, _, _)|Seq (_, _)|Dec (_, _, _, _)|Utils (_, _, _)|
+> Quantifier (_, _, _, _, _)|Assign (_, _, _)|Group (_, _))
+> File "bin/past_to_ast.ml", lines 164-168, characters 26-46:
+> 164 | ..........................match g with
+> 165 |   | Past.Grid -> cell_grid l
+> 166 |   | Past.Instance(e) ->
+> 167 |     (match e with
+> 168 |       | Past.List(_, es) -> translate_list es)
 > Warning 8: this pattern-matching is not exhaustive.
 > Here is an example of a case that is not matched:
 > Universe
-> File "bin/past_to_ast.ml", lines 140-143, characters 2-90:
-> 140 | ..match d with
-> 141 |     | Past.Dec(_, Past.Cell, var) -> 
-> 142 |         Ast.MultiOp(!op, (List.map (fun v -> 
-> 143 |           translate_expr (substitute (get_var v) (get_var var) c)) (translate_group l g)))
-> Warning 8: this pattern-matching is not exhaustive.
-> Here is an example of a case that is not matched:
-> (Dec (_, (Region|Line|Set _), _)|Integer (_, _)|Boolean (_, _)|RC (_, _, _)|
-> Var (_, _)|Op (_, _, _, _)|UnaryOp (_, _, _)|Seq (_, _)|Utils (_, _, _)|
-> Quantifier (_, _, _, _, _)|Assign (_, _, _)|List (_, _))
-> File "bin/past_to_ast.ml", lines 147-159, characters 2-68:
-> 147 | ..match e with
-> 148 |   | Past.Integer(_, n) -> Ast.Integer(n)
-> 149 |   | Past.Boolean(_, b) -> Ast.Boolean(b)
-> 150 |   | Past.RC(_, r, c) -> translate_rc r c
-> 151 |   | Past.Var(_, v) -> Ast.Var(v)
+> File "bin/past_to_ast.ml", lines 171-183, characters 2-32:
+> 171 | ..match d with
+> 172 |     | Past.Dec(_, Past.Cell, var, _) -> 
+> 173 |       let op = match q with
+> 174 |         | Past.ForAll -> Ast.MultiAnd
+> 175 |         | Past.Exists -> Ast.MultiOr
 > ...
-> 156 |     | _ -> translate_term e1 op e2)
-> 157 |   | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e
-> 158 |   | Past.Dec(_, d, e) -> translate_dec d e
-> 159 |   | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c
+> 180 |     | Past.Dec(_, Past.Region, var, _) -> 
+> 181 |       let (e1, v1) = translate_expr d vars in
+> 182 |       let (e2, v2) = translate_expr c v1 in
+> 183 |       (Ast.Bundle([e1; e2]), v2)
 > Warning 8: this pattern-matching is not exhaustive.
 > Here is an example of a case that is not matched:
-> (Seq (_, _)|Utils (_, _, _)|Assign (_, _, _)|List (_, _))
-> File "bin/past_to_ast.ml", line 167, characters 4-10:
-> 167 |   | (_, _) -> raise (Err "Puzzle requires grid declaration")
->           ^^^^^^
-> Warning 11: this match case is unused.
-> File "bin/past_to_ast.ml", line 161, characters 8-15:
-> 161 | let rec convert = function
->               ^^^^^^^
-> Warning 39: unused rec flag.
+> (Dec (_, (Int|Bool|Line|Set _), _, _)|Integer (_, _)|Boolean (_, _)|
+> RC (_, _, _)|Var (_, _)|Op (_, _, _, _)|UnaryOp (_, _, _)|Seq (_, _)|
+> Utils (_, _, _)|Quantifier (_, _, _, _, _)|Assign (_, _, _)|List (_, _)|
+> Group (_, _))
+> File "bin/past_to_ast.ml", lines 187-199, characters 2-73:
+> 187 | ..match e with
+> 188 |   | Past.Integer(_, n) -> (Ast.Integer(n), vars)
+> 189 |   | Past.Boolean(_, b) -> (Ast.Boolean(b), vars)
+> 190 |   | Past.RC(_, r, c) -> (Ast.Var(sprintf "r%ic%i" (get_int r) (get_int c)), vars)
+> 191 |   | Past.Var(_, v) -> (Ast.Var(v), vars)
+> ...
+> 196 |     | _ -> translate_term e1 op e2 vars)
+> 197 |   | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e vars
+> 198 |   | Past.Dec(_, d, e, v) -> translate_dec d e v vars
+> 199 |   | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c vars
+> Warning 8: this pattern-matching is not exhaustive.
+> Here is an example of a case that is not matched:
+> (Seq (_, _)|Utils (_, _, _)|Assign (_, _, _)|List (_, _)|Group (_, _))
+> File "bin/past_to_ast.ml", line 131, characters 22-23:
+> 131 | and translate_dec d e v vars = 
+>                             ^
+> Warning 27: unused variable v.
+> File "bin/past_to_ast.ml", line 180, characters 31-34:
+> 180 |     | Past.Dec(_, Past.Region, var, _) -> 
+>                                      ^^^
+> Warning 27: unused variable var.
 $ (cd _build/default && /home/user/.opam/4.11.1/bin/ocamlopt.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -warn-error -A -g -o bin/lang.exe /home/user/.opam/4.11.1/lib/ocaml/str.cmxa -I /home/user/.opam/4.11.1/lib/ocaml bin/.lang.eobjs/native/dune__exe.cmx bin/.lang.eobjs/native/dune__exe__Ast.cmx bin/.lang.eobjs/native/dune__exe__Ast_to_smt_lib.cmx bin/.lang.eobjs/native/dune__exe__Past.cmx bin/.lang.eobjs/native/dune__exe__Parser.cmx bin/.lang.eobjs/native/dune__exe__Lexer.cmx bin/.lang.eobjs/native/dune__exe__Past_to_ast.cmx bin/.lang.eobjs/native/dune__exe__Lang.cmx)

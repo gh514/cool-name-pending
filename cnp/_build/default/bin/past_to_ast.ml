@@ -4,10 +4,9 @@ include Printf
 
 exception Err of string
 
-let gridr = ref 0
-let gridc = ref 0
-
-
+let gridr = ref 2
+let gridc = ref 1
+let regions = ref false
 
 let translate_op = function
   | Past.Add -> Ast.Add
@@ -42,8 +41,9 @@ let get_var = function
   | Past.Var(_, v) -> v
   | _ -> raise (Err "Incorrect expression, Var expected")
 
-let translate_rc r c = 
-  Ast.Var(sprintf "r%ic%i" (get_int r) (get_int c))
+let get_var_ast = function
+  | Ast.Var(v) -> v
+  | _ -> raise (Err "Incorrect expression, Var expected")
 
 let rec substitute var_new var_old expr =
   match expr with
@@ -52,9 +52,6 @@ let rec substitute var_new var_old expr =
   | Past.UnaryOp(l, uop, e) -> Past.UnaryOp(l, uop, substitute var_new var_old e)
   | Past.Quantifier(l, q, d, g, e) -> Past.Quantifier(l, q, d, g, substitute var_new var_old e)
   | e -> e
-
-let apply_forall vars v_old c =
-  List.map (fun v -> substitute v v_old c) vars
 
 let cell_grid l = 
   let m = !gridr in
@@ -76,17 +73,26 @@ let bool_grid reg =
     | _, _ -> Ast.Var(sprintf "r%ic%i_in_%s" r c reg) :: (loop r (c-1))
   in List.rev (loop m n)
 
-let bool_field = 
+let int_grid str = 
   let m = !gridr in
   let n = !gridc in
+  let rec loop r c =
+    match r, c with
+    | 0, _ -> []
+    | _, 0 -> loop (r-1) n
+    | _, _ -> Ast.Var(sprintf "r%ic%i_%s" r c str) :: (loop r (c-1))
+  in List.rev (loop m n)
+
+let bool_field _ = 
+  let m = !gridr in
+  let n = !gridc in
+  
   let surrounding r c = 
-    [(r+1, c+1); (r+1, c); (r+1, c-1);
-     (r, c+1);             (r, c-1);
-     (r-1, c+1); (r-1, c); (r-1, c-1)] in
+    [(r+1, c); (r, c+1); (r, c-1); (r-1, c)] in
   
   let create_vars r c =
     List.map (fun (rs, cs) -> Ast.Var(sprintf"r%ic%iTor%ic%i" r c rs cs))
-      (List.filter (fun (r, c) -> r >= 1 && r <= m && c >= 1 && c<=n) (surrounding r c)) in
+      (List.filter (fun (r, c) -> r >= 1 && r <= m && c >= 1 && c <= n) (surrounding r c)) in
 
   let rec loop r c =
     match r, c with
@@ -94,6 +100,12 @@ let bool_field =
     | _, 0 -> loop (r-1) n
     | _, _ -> (create_vars r c) @ (loop r (c-1))
   in List.rev (loop m n)
+
+let init_regions _ =
+  let field = List.map (fun v -> Ast.Dec(Ast.Bool, v)) (bool_field ()) in
+  let size_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "size") in
+  let num_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "num") in
+    Ast.Group(field @ size_grid @ num_grid)
 
 let translate_list xs = 
   let rec loop = function
@@ -103,20 +115,43 @@ let translate_list xs =
     | _ -> raise (Err "Some list thing")
   in loop xs
 
-let rec translate_term e1 op e2 =
-  let expr1 = translate_expr e1 in
-  let expr2 = translate_expr e2 in
-  Ast.Op(expr1, translate_op op, expr2)
+let rec match_var v = function
+  | x::xs -> if Str.string_match (Str.regexp (get_var x)) v 0 then true else match_var v xs
+  | [] -> false
+  
+let rec translate_term e1 op e2 vars =
+  let (expr1, _) = translate_expr e1 vars in
+  let (expr2, _) = translate_expr e2 vars in
+  (Ast.Op(expr1, translate_op op, expr2), vars)
 
-and translate_unary_term uop e =
-  let expr = translate_expr e in Ast.UnaryOp(translate_unary_op uop, expr)
+and translate_unary_term uop e vars =
+  let (expr, _) = translate_expr e vars in
+  (Ast.UnaryOp(translate_unary_op uop, expr), vars)
 
-
-and translate_dec d e = 
+and translate_dec d e v vars = 
+  let (ne, _) = translate_expr e vars in
   match d with
+  | Past.Int -> (Ast.Dec(Ast.Int, ne), (Past.Int, ne, None)::vars)
   | Past.Cell -> raise (Err "Cannot declare Cell")
-  | Past.Region -> let v = translate_expr e in
-    let field = bool_grid (get_var e) in Ast.Group(v, field)
+  | Past.Region -> if !regions then (Ast.Dead, vars)
+    else (regions:=true; (init_regions (), vars))
+    
+    (*let grid = bool_grid (get_var e) in 
+    let nlist = match v with 
+      | Some(Past.Group(_, Past.Instance(Past.List(_, list)))) -> List.map (fun rc -> 
+        let (expr, _) = translate_expr rc vars in expr) list in
+        (Ast.Dec(Ast.Region, Ast.Group(ne, grid)) ,(Past.Region, ne, Some grid)::vars)
+  
+    (Ast.Bundle(
+      Ast.Dec(Ast.Region, Ast.Group(ne, grid)) ::
+        List.map (fun x -> (List.map (fun c -> if Str.string_match (Str.regexp (get_var_ast c)) x 0 then c else Ast.UnaryOp(Ast.Neg, c)
+          
+          ) grid)) nlist
+    )
+
+    *)
+    
+  | _ -> raise (Err "Unimplemented datatype")
 
   (*
   | Past.Line -> let ex = translate_expr e vars in
@@ -132,54 +167,48 @@ and translate_group l g = match g with
     (match e with
       | Past.List(_, es) -> translate_list es)
     
-and translate_quantifier l q d g c =
-  let op = ref Ast.MultiAnd in
-  (match q with
-    | Past.ForAll -> ()
-    | Past.Exists -> op := Ast.MultiOr);
+and translate_quantifier l q d g c vars =
   match d with
-    | Past.Dec(_, Past.Cell, var) -> 
-        Ast.MultiOp(!op, (List.map (fun v -> 
-          translate_expr (substitute (get_var v) (get_var var) c)) (translate_group l g)))
+    | Past.Dec(_, Past.Cell, var, _) -> 
+      let op = match q with
+        | Past.ForAll -> Ast.MultiAnd
+        | Past.Exists -> Ast.MultiOr
+      in
+      (Ast.MultiOp(op, (List.map (fun v -> let (expr, _) = 
+        translate_expr (substitute (get_var v) (get_var var) c) vars in
+        expr) (translate_group l g))), vars)
+    | Past.Dec(_, Past.Region, var, _) -> 
+      let (e1, v1) = translate_expr d vars in
+      let (e2, v2) = translate_expr c v1 in
+      (Ast.Bundle([e1; e2]), v2)
+      
   
-        
-and translate_expr e = 
+and translate_expr e vars = 
   match e with
-  | Past.Integer(_, n) -> Ast.Integer(n)
-  | Past.Boolean(_, b) -> Ast.Boolean(b)
-  | Past.RC(_, r, c) -> translate_rc r c
-  | Past.Var(_, v) -> Ast.Var(v)
+  | Past.Integer(_, n) -> (Ast.Integer(n), vars)
+  | Past.Boolean(_, b) -> (Ast.Boolean(b), vars)
+  | Past.RC(_, r, c) -> (Ast.Var(sprintf "r%ic%i" (get_int r) (get_int c)), vars)
+  | Past.Var(_, v) -> (Ast.Var(v), vars)
   | Past.Op(_, e1, op, e2) -> 
     (match op with
-    | Past.RightImp -> translate_term e2 Past.LeftImp e1
-    | Past.BiImp -> translate_term e1 Past.Equal e2
-    | _ -> translate_term e1 op e2)
-  | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e
-  | Past.Dec(_, d, e) -> translate_dec d e
-  | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c
+    | Past.RightImp -> translate_term e2 Past.LeftImp e1 vars
+    | Past.BiImp -> translate_term e1 Past.Equal e2 vars
+    | _ -> translate_term e1 op e2 vars)
+  | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e vars
+  | Past.Dec(_, d, e, v) -> translate_dec d e v vars
+  | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c vars
 
-let rec convert = function
-  | ((_, r, c), xs) -> gridr := r; gridc := c;
-    let rec loop = function
-      | e::es -> (translate_expr e) :: (loop es)
-      | [] -> []
-    in ((r, c), loop xs) 
-  | (_, _) -> raise (Err "Puzzle requires grid declaration")
-
-(*
 let rec flatten = function
-  | Ast.Seq(l) -> 
-    let rec loop = function
-      | x::xs -> (flatten x) @ (loop xs)
-      | [] -> []
-    in loop l
-  | e -> [e]
-*)
-(*
-let _ =
-  let rec loop = function
-    | x::xs -> Format.print_string (get_var x); loop xs
-    | [] -> ()
-  in loop ()
+  | Ast.Bundle(l)::es -> (flatten l) @ flatten es
+  | Ast.Dead::es -> flatten es
+  | e::es -> e::(flatten es)
+  | [] -> []
 
-  *)
+let convert = function
+  | ((_, r, c), xs) -> gridr := r; gridc := c;
+    let rec loop exprs vars = 
+      match exprs with
+      | e::es -> let (expr, nvars) = translate_expr e vars in
+        expr :: (loop es nvars)
+      | [] -> []
+    in ((r, c), flatten (loop xs []))
