@@ -61,3 +61,4 @@ type expr =
   | Group of expr list
   | Bundle of expr list
   | Dead
+  | ITE of expr * expr * expr

@@ -6,7 +6,6 @@ type token =
   | GRID
   | CROSS
   | CELL
-  | SET
   | REGION
   | LINE
   | ROW

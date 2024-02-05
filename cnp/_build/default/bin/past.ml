@@ -28,11 +28,13 @@ type data_type =
   | Cell
   | Region
   | Line
-  | Set of data_type
 
 type unary_op = 
   | Neg
   | Not
+
+type region_op =
+  | Adjacent
 
 type utilities =
   | Cells
@@ -56,6 +58,7 @@ and expr =
   | Var of loc * var
   | Op of loc * expr * op * expr
   | UnaryOp of loc * unary_op * expr
+  | RegionOp of loc * expr * region_op * expr
   | Seq of loc * (expr list)
   | Dec of loc * data_type * expr * (expr option)
   | Utils of loc * expr * utilities

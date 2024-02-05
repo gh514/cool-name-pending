@@ -25,7 +25,6 @@ rule token = parse
     | ('R')         {ROW}
     | ('C')         {COLUMN}
     | ("Cell")      {CELL}
-    | ("Set")       {SET}
     | ("Region")    {REGION}
     | ("Line")      {LINE}
     | ("Int")       {INTDEC}

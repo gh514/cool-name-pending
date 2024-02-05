@@ -60,8 +60,8 @@ let rec init_grid r c m =
     
 let rec translate_dec dt e =
   match dt with
-  | Ast.Int -> out "\n(declare-const"; translate_expr e; out " Int)"
-  | Ast.Bool -> out "\n(declare-const"; translate_expr e; out " Bool)"
+  | Ast.Int -> out "(declare-const"; translate_expr e; out " Int)"
+  | Ast.Bool -> out "(declare-const"; translate_expr e; out " Bool)"
   | Ast.Cell -> raise (Err "Type Ast.Cell should not be possible")
   | Ast.Region -> match e with
     | Ast.Group(field) -> translate_group field
@@ -83,6 +83,7 @@ and translate_expr e =
   (match e with
     | Ast.Group(_) -> ()
     | Ast.Bundle(_) -> ()
+    | Ast.Dec(_, _) -> ()
     | _ ->  out " ");
   match e with 
     | Ast.Integer(i)-> out "%d" i
@@ -94,6 +95,7 @@ and translate_expr e =
     | Ast.Dec(dt, e) -> translate_dec dt e
     | Ast.Group(es) -> translate_group es
     | Ast.Bundle(es) -> translate_bundle es
+    | Ast.ITE(c, e1, e2) -> out "(ite"; translate_expr c; translate_expr e1; translate_expr e2
     | _ -> ()
 
 let translate p =
@@ -107,9 +109,9 @@ let translate p =
           | Ast.Group(_) -> nl(); translate_expr e; loop es
           | Ast.Dec(_, _) -> nl(); translate_expr e; loop es
           | Ast.Bundle(_) -> nl(); translate_expr e; loop es
-          | _ ->  out "\n\n(assert"; translate_expr e; close(); loop es)
+          | _ ->  out "\n(assert"; translate_expr e; close(); loop es)
         | [] -> ()
-      in loop xs; out "\n\n(check-sat)\n"
+      in loop xs; out "\n\n(check-sat)\n(get-model)\n"
     | _ -> out "Puzzle must begin with grid declaration"; nl ();
 
 (*
