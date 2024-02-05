@@ -83,6 +83,11 @@ let int_grid str =
     | _, _ -> Ast.Var(sprintf "r%ic%i_%s" r c str) :: (loop r (c-1))
   in loop m n
 
+
+  let rec unzip = function
+  | (a, b)::ls -> a::b::(unzip ls)
+  | [] -> []
+
 let create_vars () =
   let m = !gridr in
   let n = !gridc in
@@ -99,24 +104,30 @@ let create_vars () =
 
   in let all_pairs = grid_pairs m n 1
 
-  in let get_vars = List.map (fun ((r, c), (rs, cs)) -> (Ast.Var(sprintf "r%ic%iTor%ic%i" r c rs cs), 
-      Ast.Var(sprintf "r%ic%iTor%ic%i" rs cs r c))) all_pairs
+  in let get_vars = List.map (fun ((r1, c1), (r2, c2)) -> (Ast.Var(sprintf "r%ic%iTor%ic%i" r1 c1 r2 c2), 
+      Ast.Var(sprintf "r%ic%iTor%ic%i" r2 c2 r1 c1))) all_pairs
 
-(*
+
+
   in let rec parent_constraints r c =
-    List.map (fun ((r1, c1), (r2, c2)) -> ) all_pairs
-    *)
+    let adj_cells = adj r c in
+    List.map (fun ((_, _), (rx, cx)) -> 
+      
+      
+      Ast.Op(Ast.Var(sprintf "r%ic%iTor%ic%i" rx cx r c), Ast.LeftImp, Ast.UnaryOp(Ast.Not, 
+        Ast.MultiOp(Ast.MultiOr, 
+        
+        (let rec loop = function
+          | ((_, _), (ry, cy))::ls -> Ast.Var(sprintf "r%ic%iTor%ic%i" ry cy r c) :: (loop ls)
+          | [] -> []
+        in loop (List.filter (fun ((_, _), (rz, cz)) -> not ((rx, cx) = (rz, cz))) adj_cells)
+        ))
+  
+    )))
+    adj_cells
 
   in get_vars 
   
-    
-  
-
-
-  
-let rec unzip = function
-  | (a, b)::ls -> a::b::(unzip ls)
-  | [] -> []
 
 let direction_constraints f = 
   let rec loop = function
