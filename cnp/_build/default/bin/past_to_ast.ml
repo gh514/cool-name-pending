@@ -102,36 +102,53 @@ let create_vars () =
       | _, -1 -> grid_pairs (r-1) (n-offset) (1-offset)
       | _, _ -> (adj r c) @ (grid_pairs r (c-2) offset)
 
-  in let all_pairs = grid_pairs m n 1
+  in grid_pairs m n 1
 
-  in let get_vars = List.map (fun ((r1, c1), (r2, c2)) -> (Ast.Var(sprintf "r%ic%iTor%ic%i" r1 c1 r2 c2), 
-      Ast.Var(sprintf "r%ic%iTor%ic%i" r2 c2 r1 c1))) all_pairs
+let get_vars pairs = List.map (fun ((r1, c1), (r2, c2)) -> (Ast.Var(sprintf "r%ic%iTor%ic%i" r1 c1 r2 c2), 
+  Ast.Var(sprintf "r%ic%iTor%ic%i" r2 c2 r1 c1))) pairs
 
+let direction_constraints f = 
+  let rec loop = function
+    | (v1, v2)::ls -> Ast.UnaryOp(Ast.Not, Ast.Op(v1, Ast.And, v2)) :: (loop ls)
+    | [] -> []
+  in loop f
 
+let get_parent_constraints () = 
+  let m = !gridr in
+  let n = !gridc in
+
+  let adj r c = List.map (fun (rs, cs) -> ((r, c), (rs, cs)))
+  (List.filter (fun (r, c) -> r >= 1 && r <= m && c >= 1 && c <= n) [(r+1, c); (r, c+1); (r, c-1); (r-1, c)])
+
+  (*clean up constraints*)
 
   in let rec parent_constraints r c =
     let adj_cells = adj r c in
     List.map (fun ((_, _), (rx, cx)) -> 
-      
-      
       Ast.Op(Ast.Var(sprintf "r%ic%iTor%ic%i" rx cx r c), Ast.LeftImp, Ast.UnaryOp(Ast.Not, 
         Ast.MultiOp(Ast.MultiOr, 
-        
+      
         (let rec loop = function
           | ((_, _), (ry, cy))::ls -> Ast.Var(sprintf "r%ic%iTor%ic%i" ry cy r c) :: (loop ls)
           | [] -> []
         in loop (List.filter (fun ((_, _), (rz, cz)) -> not ((rx, cx) = (rz, cz))) adj_cells)
         ))
-  
     )))
     adj_cells
 
-  in get_vars 
-  
+  in let rec parent_loop r c = 
+    match (r, c) with
+    | 0, _ -> []
+    | _, 0 -> parent_loop (r-1) n
+    | _, _ -> (parent_constraints r c) @ parent_loop r (c-1)
 
-let direction_constraints f = 
+  in parent_loop m n
+
+
+let size_constraints f =
   let rec loop = function
-    | (v1, v2)::ls -> Ast.UnaryOp(Ast.Not, Ast.Op(v1, Ast.And, v2)) :: (loop ls)
+    | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Var(sprintf "r%ic%iTor%ic%i" r1 c1 r2 c2), Ast.LeftImp, 
+    Ast.Op(Ast.Var(sprintf "r%ic%i_size" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_size" r2 c2))) :: (loop ls)
     | [] -> []
   in loop f
 
@@ -151,11 +168,13 @@ let size_constraints f =
 
 let init_regions _ =
   let grid = create_vars () in
-  let field = List.map (fun v -> Ast.Dec(Ast.Bool, v)) (unzip grid) in
-  let constr_field = direction_constraints grid in
+  let field = List.map (fun v -> Ast.Dec(Ast.Bool, v)) (unzip (get_vars grid)) in
+  let constr_field = direction_constraints (get_vars grid) in
   let size_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "size") in
   let num_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "num") in
-    Ast.Bundle(field @ size_grid @ num_grid @ constr_field)
+  let parent_constr = get_parent_constraints () in
+  let size_constr = size_constraints grid in
+    Ast.Bundle(field @ size_grid @ num_grid @ constr_field @ parent_constr @ size_constr)
 
 let translate_list xs = 
   let rec loop = function
