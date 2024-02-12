@@ -60,11 +60,11 @@ rule token = parse
     | ("!Forall")   {NFORALL}
     | ("!Exists")   {NEXISTS}
     | ('.')         {POINT}
-    | ("cells")     {CELLS}
-    | ("value")     {VALUE}
-    | ("size")      {SIZE}
-    | ("length")    {LENGTH}
-    | ("adjacent")  {ADJACENT}
+    | ("Cells")     {CELLS}
+    | ("Value")     {VALUE}
+    | ("Size")      {SIZE}
+    | ("Length")    {LENGTH}
+    | ("Adj")       {ADJACENT}
     | int_regex     {INT (int_of_string (Lexing.lexeme lexbuf))}
     | var_regex     {VAR (Lexing.lexeme lexbuf)}
     | (newline)     {next_line lexbuf; token lexbuf}

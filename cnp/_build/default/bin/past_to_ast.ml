@@ -50,8 +50,27 @@ let rec substitute var_new var_old expr =
   | Past.Var(l, v) -> if v = var_old then Past.Var(l, var_new) else Past.Var(l, v)
   | Past.Op(l, e1, op, e2) -> Past.Op(l, substitute var_new var_old e1, op, substitute var_new var_old e2)
   | Past.UnaryOp(l, uop, e) -> Past.UnaryOp(l, uop, substitute var_new var_old e)
+  | Past.RegionOp(l, e1, rop, e2) -> Past.RegionOp(l, substitute var_new var_old e1, rop, substitute var_new var_old e2)
   | Past.Quantifier(l, q, d, g, e) -> Past.Quantifier(l, q, d, g, substitute var_new var_old e)
+  | Past.Utils(l, e, u) -> Past.Utils(l, substitute var_new var_old e, u)
   | e -> e
+
+let rec ast_to_past location l =
+  match l with
+  | Ast.Var(x)::ls -> Past.Var(location, x)::(ast_to_past location ls)
+  | [] -> []
+
+let make_var_pair r1 c1 r2 c2 = Ast.Var(sprintf "r%ic%iTor%ic%i" r1 c1 r2 c2)
+
+let cells () =
+  let m = !gridr in
+  let n = !gridc in
+  let rec loop r c =
+    match r, c with
+    | 0, _ -> []
+    | _, 0 -> loop (r-1) n
+    | _, _ -> (r, c) :: loop r (c-1)
+  in loop m n
 
 let cell_grid l = 
   let m = !gridr in
@@ -83,18 +102,21 @@ let int_grid str =
     | _, _ -> Ast.Var(sprintf "r%ic%i_%s" r c str) :: (loop r (c-1))
   in loop m n
 
-
   let rec unzip = function
   | (a, b)::ls -> a::b::(unzip ls)
   | [] -> []
 
+let adj r c = 
+  let m = !gridr in
+  let n = !gridc in
+  List.map (fun (rs, cs) -> ((r, c), (rs, cs)))
+  (List.filter (fun (r, c) -> r >= 1 && r <= m && c >= 1 && c <= n) [(r+1, c); (r, c+1); (r, c-1); (r-1, c)])
+
 let create_vars () =
   let m = !gridr in
   let n = !gridc in
-  let adj r c = List.map (fun (rs, cs) -> ((r, c), (rs, cs)))
-    (List.filter (fun (r, c) -> r >= 1 && r <= m && c >= 1 && c <= n) [(r+1, c); (r, c+1); (r, c-1); (r-1, c)])
   
-  in let rec grid_pairs r c offset =
+  let rec grid_pairs r c offset =
       match r, c with
       | 0, _ -> []
       | -1, _ -> []
@@ -104,8 +126,8 @@ let create_vars () =
 
   in grid_pairs m n 1
 
-let get_vars pairs = List.map (fun ((r1, c1), (r2, c2)) -> (Ast.Var(sprintf "r%ic%iTor%ic%i" r1 c1 r2 c2), 
-  Ast.Var(sprintf "r%ic%iTor%ic%i" r2 c2 r1 c1))) pairs
+let get_vars pairs = List.map (fun ((r1, c1), (r2, c2)) -> 
+  (make_var_pair r1 c1 r2 c2, make_var_pair r2 c2 r1 c1)) pairs
 
 let direction_constraints f = 
   let rec loop = function
@@ -117,19 +139,13 @@ let get_parent_constraints () =
   let m = !gridr in
   let n = !gridc in
 
-  let adj r c = List.map (fun (rs, cs) -> ((r, c), (rs, cs)))
-  (List.filter (fun (r, c) -> r >= 1 && r <= m && c >= 1 && c <= n) [(r+1, c); (r, c+1); (r, c-1); (r-1, c)])
-
-  (*clean up constraints*)
-
-  in let rec parent_constraints r c =
+  let rec parent_constraints r c =
     let adj_cells = adj r c in
     List.map (fun ((_, _), (rx, cx)) -> 
-      Ast.Op(Ast.Var(sprintf "r%ic%iTor%ic%i" rx cx r c), Ast.LeftImp, Ast.UnaryOp(Ast.Not, 
-        Ast.MultiOp(Ast.MultiOr, 
-      
+      Ast.Op(make_var_pair rx cx r c, Ast.LeftImp, Ast.UnaryOp(Ast.Not, 
+        Ast.MultiOp(Ast.Or, 
         (let rec loop = function
-          | ((_, _), (ry, cy))::ls -> Ast.Var(sprintf "r%ic%iTor%ic%i" ry cy r c) :: (loop ls)
+          | ((_, _), (ry, cy))::ls -> (make_var_pair ry cy r c) :: (loop ls)
           | [] -> []
         in loop (List.filter (fun ((_, _), (rz, cz)) -> not ((rx, cx) = (rz, cz))) adj_cells)
         ))
@@ -144,13 +160,67 @@ let get_parent_constraints () =
 
   in parent_loop m n
 
+let get_children_constraints () =
+  let m = !gridr in
+  let n = !gridc in
+
+  let children_constraints r c =
+    let adj_cells = adj r c in
+    Ast.Op(Ast.Var(sprintf "r%ic%i_num" r c), Ast.Equal,
+      Ast.MultiOp(Ast.Add, Ast.Integer(1) ::
+        (let rec loop = function
+          | ((_, _), (ry, cy))::ls -> Ast.ITE(
+            make_var_pair r c ry cy, Ast.Var(sprintf "r%ic%i_num" ry cy), Ast.Integer(0)) :: loop ls
+          | [] -> []
+        in loop adj_cells
+        )))
+
+  in let rec child_loop r c =
+    match (r, c) with
+    | 0, _ -> []
+    | _, 0 -> child_loop (r-1) n
+    | _, _ -> (children_constraints r c) :: child_loop r (c-1)
+
+  in child_loop m n
 
 let size_constraints f =
   let rec loop = function
-    | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Var(sprintf "r%ic%iTor%ic%i" r1 c1 r2 c2), Ast.LeftImp, 
-    Ast.Op(Ast.Var(sprintf "r%ic%i_size" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_size" r2 c2))) :: (loop ls)
+    | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Op(make_var_pair r1 c1 r2 c2, Ast.Or, make_var_pair r2 c2 r1 c1), Ast.LeftImp, 
+      Ast.Op(Ast.Var(sprintf "r%ic%i_size" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_size" r2 c2))) :: (loop ls)
     | [] -> []
   in loop f
+
+let origin_constraints f = 
+  let rec loop = function
+    | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(make_var_pair r1 c1 r2 c2, Ast.LeftImp, 
+      Ast.Op(Ast.Var(sprintf "r%ic%i_root" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_root" r2 c2)))::
+      Ast.Op(make_var_pair r2 c2 r1 c1, Ast.LeftImp, 
+      Ast.Op(Ast.Var(sprintf "r%ic%i_root" r2 c2), Ast.Equal, Ast.Var(sprintf "r%ic%i_root" r1 c1)))::(loop ls)
+    | [] -> []
+  in loop f
+
+
+let get_root_constraints () =
+  let m = !gridr in
+  let n = !gridc in
+
+  let root_constraints r c =
+    Ast.Op(Ast.UnaryOp(Ast.Not, Ast.MultiOp(Ast.Or, 
+      List.map (fun ((_, _), (rx, cx)) -> make_var_pair rx cx r c) (adj r c))), Ast.LeftImp,
+      Ast.Op(Ast.Op(Ast.Var(sprintf "r%ic%i_size" r c), Ast.Equal, Ast.Var(sprintf "r%ic%i_num" r c)),
+        Ast.And, Ast.Op(Ast.Var(sprintf "r%ic%i_root" r c), Ast.Equal, Ast.Integer((r-1)*n + c)))
+      )
+
+  in let rec root_loop r c =
+    match (r, c) with
+    | 0, _ -> []
+    | _, 0 -> root_loop (r-1) n
+    | _, _ -> (root_constraints r c) :: root_loop r (c-1)
+
+  in root_loop m n
+
+
+
 
   (*
 let parent_constraints f = 
@@ -173,8 +243,10 @@ let init_regions _ =
   let size_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "size") in
   let num_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "num") in
   let parent_constr = get_parent_constraints () in
+  let children_constr = get_children_constraints () in
   let size_constr = size_constraints grid in
-    Ast.Bundle(field @ size_grid @ num_grid @ constr_field @ parent_constr @ size_constr)
+  let root_constr = get_root_constraints () in
+    Ast.Bundle(field @ size_grid @ num_grid @ constr_field @ parent_constr @ children_constr @ size_constr @ root_constr)
 
 let translate_list xs = 
   let rec loop = function
@@ -189,9 +261,9 @@ let rec match_var v = function
   | [] -> false
   
 let rec translate_term e1 op e2 vars =
-  let (expr1, _) = translate_expr e1 vars in
-  let (expr2, _) = translate_expr e2 vars in
-  (Ast.Op(expr1, translate_op op, expr2), vars)
+  let (expr1, vars1) = translate_expr e1 vars in
+  let (expr2, vars2) = translate_expr e2 vars1 in
+  (Ast.Op(expr1, translate_op op, expr2), vars2)
 
 and translate_unary_term uop e vars =
   let (expr, _) = translate_expr e vars in
@@ -202,8 +274,8 @@ and translate_dec d e v vars =
   match d with
   | Past.Int -> (Ast.Dec(Ast.Int, ne), (Ast.Int, ne, None)::vars)
   | Past.Cell -> (Ast.Dead, (Ast.Cell, ne, None)::vars)
-  | Past.Region -> if !regions then (Ast.Dead, vars)
-    else (regions:=true; (init_regions (), vars))
+  | Past.Region -> if !regions then (Ast.Dead, (Ast.Region, ne, None)::vars)
+    else (regions:=true; (init_regions (), (Ast.Region, ne, None)::vars))
     
     (*let grid = bool_grid (get_var e) in 
     let nlist = match v with 
@@ -237,29 +309,36 @@ and translate_group l g = match g with
       | Past.List(_, es) -> translate_list es)
     
 and translate_quantifier l q d g c vars =
-  match d with
+  let op = match q with
+    | Past.ForAll -> Ast.And
+    | Past.Exists -> Ast.Or
+  in match d with
     | Past.Dec(_, Past.Cell, var, _) -> 
-      let op = match q with
-        | Past.ForAll -> Ast.MultiAnd
-        | Past.Exists -> Ast.MultiOr
-      in let (_, nvars) = translate_expr var vars in
+      let (_, nvars) = translate_expr var vars in
       (Ast.MultiOp(op, (List.map (fun v -> let (expr, _) = 
         translate_expr (substitute (get_var v) (get_var var) c) vars in expr) (translate_group l g))), nvars)
-    | Past.Dec(_, Past.Region, _, _) -> 
-      let (e1, v1) = translate_expr d vars in
-      let (e2, v2) = translate_expr c v1 in
-      (Ast.Bundle([e1; e2]), v2)
 
-(*
+    | Past.Dec(_, Past.Region, r, _) -> 
+      let (reg, nvars) = translate_expr d vars in
+      (Ast.Bundle([reg; Ast.MultiOp(op, List.map (fun v -> let (expr, _) = 
+        translate_expr (substitute (get_var v) (get_var r) c) vars in expr) (cell_grid l))]), nvars)
 
-and translate_region_term e1 rop e2 vars1 =
-  let (v1, vars2) = translate_expr e1 vars1 in
-  let (v2, vars3) = translate_expr e2, vars2 in
-  match rop with
-  | Past.Adjacent -> Ast.MultiOp(Ast.MultiAnd, List.map (fun c -> Ast.UnaryOp(Ast.Not, )) (bool_field ())
+and translate_region_term e1 rop e2 vars =
+  let (Ast.Var(v1), vars1) = translate_expr e1 vars in
+  let (Ast.Var(v2), vars2) = translate_expr e2 vars1 in
+  let rc1 = Ast.Var(sprintf "%sTo%s" v1 v2) in
+  let rc2 = Ast.Var(sprintf "%sTo%s" v2 v1) in
+
+  if List.mem (rc1, rc2) (get_vars (create_vars ())) or List.mem (rc2, rc1) (get_vars (create_vars ())) then 
+    match rop with
+    | Past.Adjacent -> (Ast.UnaryOp(Ast.Not, Ast.Op(rc1, Ast.Or, rc2)), vars2)
+  else (Ast.Dead, vars2)
+
+and translate_utils e u vars =
+  match u with
+  | Past.Size -> (Ast.Var(sprintf "%s_size" (get_var e)), vars)
   
-  , vars3)
-*)
+
  
 and translate_expr e vars = 
   match e with
@@ -269,21 +348,28 @@ and translate_expr e vars =
   | Past.Var(_, v) -> (Ast.Var(v), vars)
   | Past.Op(_, e1, op, e2) -> 
     (match op with
-    | Past.RightImp -> translate_term e2 Past.LeftImp e1 vars
-    | Past.BiImp -> translate_term e1 Past.Equal e2 vars
-    | _ -> translate_term e1 op e2 vars)
+      | Past.RightImp -> translate_term e2 Past.LeftImp e1 vars
+      | Past.BiImp -> translate_term e1 Past.Equal e2 vars
+      | _ -> translate_term e1 op e2 vars)
   | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e vars
-  (*
   | Past.RegionOp(_, e1, rop, e2) -> translate_region_term e1 rop e2 vars
-  *)
   | Past.Dec(_, d, e, v) -> translate_dec d e v vars
   | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c vars
+  | Past.Utils(_, e, u) -> translate_utils e u vars
 
 let rec flatten = function
   | Ast.Bundle(l)::es -> (flatten l) @ flatten es
   | Ast.Dead::es -> flatten es
   | e::es -> e::(flatten es)
   | [] -> []
+
+let clean e =
+  let rec loop = function
+    | Ast.Dead::ls -> loop ls
+    
+    | ex::ls -> ex::(loop ls)
+    | [] -> []
+  in loop e
 
 let convert = function
   | ((_, r, c), xs) -> gridr := r; gridc := c;

@@ -27,8 +27,9 @@ let location = Parsing.symbol_start_pos;;
 %left MUL DIV OR XOR
 %left ADD SUB AND
 
+%nonassoc POINT
 %nonassoc INTDEC BOOLDEC CELL REGION LINE CROSS
-%nonassoc LBRACK RBRACK LSBRACK RSBRACK EQUAL GRID
+%nonassoc LBRACK RBRACK LSBRACK RSBRACK EQUAL GRID VAR
 
 %start main
 %type <((Lexing.position * int * int) * Past.expr list)> main
@@ -47,6 +48,7 @@ simple_expr:
     | VAR                                   {Past.Var(location(), $1)}
     | ROW simple_expr COLUMN simple_expr    {Past.RC(location(), $2, $4)}
     | group                                 {Past.Group(location(), $1)}
+    | VAR POINT SIZE                        {Past.Utils(location(), Past.Var(location(), $1), Past.Size)}
 
 dec:
     | INTDEC simple_expr                            {Past.Dec(location(), Past.Int, $2, None)}
@@ -94,7 +96,7 @@ expr:
     | expr LEFTIMP expr                     {Past.Op(location(), $1, Past.LeftImp, $3)}
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
-    | VAR ADJACENT VAR                      {Past.RegionOp(location(), Past.Var(location(), $1), Past.Adjacent, Past.Var(location(), $3))}
+    | expr ADJACENT expr                    {Past.RegionOp(location(), $1, Past.Adjacent, $3)}
     | FORALL dec IN group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), Past.ForAll, $2, $4, $7)}
     | EXISTS dec IN group POINT LBRACK expr RBRACK

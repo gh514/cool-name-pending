@@ -1,5 +1,3 @@
 Grid 3X3;
 
-Forall Region r1.(
-    Forall Region r2.(1))
-
+Region r1

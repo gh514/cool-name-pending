@@ -26,10 +26,6 @@ type data_type =
   | Line
   | Set of data_type
 
-type multi_op =
-  | MultiAnd 
-  | MultiOr
-
 type unary_op = 
   | Neg
   | Not
@@ -55,7 +51,7 @@ type expr =
   | Var of var
   | Op of expr * op * expr
   | UnaryOp of unary_op * expr
-  | MultiOp of multi_op * (expr list)
+  | MultiOp of op * (expr list)
   | Dec of data_type * expr
   | Utils of expr * utilities
   | Group of expr list
