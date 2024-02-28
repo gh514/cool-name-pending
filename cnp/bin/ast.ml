@@ -54,7 +54,6 @@ type expr =
   | MultiOp of op * (expr list)
   | Dec of data_type * expr
   | Utils of expr * utilities
-  | Group of expr list
   | Bundle of expr list
-  | Dead
   | ITE of expr * expr * expr
+  | Dead

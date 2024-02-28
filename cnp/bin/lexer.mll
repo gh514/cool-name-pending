@@ -61,7 +61,6 @@ rule token = parse
     | ("!Exists")   {NEXISTS}
     | ('.')         {POINT}
     | ("Cells")     {CELLS}
-    | ("Value")     {VALUE}
     | ("Size")      {SIZE}
     | ("Length")    {LENGTH}
     | ("Adj")       {ADJACENT}

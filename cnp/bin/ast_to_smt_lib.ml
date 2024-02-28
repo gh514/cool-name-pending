@@ -59,7 +59,7 @@ let rec translate_dec dt e =
   | Ast.Bool -> out "(declare-const"; translate_expr e; out " Bool)"
   | Ast.Cell -> raise (Err "Type Ast.Cell should not be possible")
   | Ast.Region -> match e with
-    | Ast.Group(field) -> translate_group field
+    | Ast.Bundle(field) -> translate_group field
 
 
 and translate_list = function
@@ -76,7 +76,6 @@ and translate_bundle = function
 
 and translate_expr e = 
   (match e with
-    | Ast.Group(_) -> ()
     | Ast.Bundle(_) -> ()
     | Ast.Dec(_, _) -> ()
     | _ ->  out " ");
@@ -90,7 +89,6 @@ and translate_expr e =
       | _ -> translate_op op; translate_list e; depth := !depth-1; close ())
     | Ast.Var(v) -> out "%s" v
     | Ast.Dec(dt, e) -> translate_dec dt e
-    | Ast.Group(es) -> translate_group es
     | Ast.Bundle(es) -> translate_bundle es
     | Ast.ITE(c, e1, e2) -> out "(ite"; translate_expr c; translate_expr e1; translate_expr e2; close ()
     | _ -> ()
@@ -103,7 +101,6 @@ let translate p =
     | ((r, c), xs) -> init_grid r c c;
       let rec loop = function
         | e::es -> (match e with
-          | Ast.Group(_) -> nl(); translate_expr e; loop es
           | Ast.Dec(_, _) -> nl(); translate_expr e; loop es
           | Ast.Bundle(_) -> nl(); translate_expr e; loop es
           | _ ->  out "\n(assert"; translate_expr e; close(); loop es)

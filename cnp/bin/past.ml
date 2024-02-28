@@ -41,10 +41,13 @@ type utilities =
   | Value
   | Size
   | Length
+  | Reg
 
 type quant =
   | ForAll
   | Exists
+  | NForAll
+  | NExists
 
 type group = 
   | Grid

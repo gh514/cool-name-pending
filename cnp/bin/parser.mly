@@ -16,7 +16,7 @@ let location = Parsing.symbol_start_pos;;
 %token LEFTIMP RIGHTIMP BIIMP
 %token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON COMMA POINT
 %token FORALL EXISTS NFORALL NEXISTS IN
-%token CELLS VALUE SIZE LENGTH
+%token CELLS SIZE LENGTH
 %token ADJACENT
 %token EOF
 
@@ -70,11 +70,20 @@ list:
     | simple_expr                           {[$1]}
     | simple_expr COMMA list                {$1::$3}    
 
+utils:
+    | POINT CELLS                           {Past.Cells}
+    | POINT SIZE                            {Past.Size}
+    | POINT LENGTH                          {Past.Length}
+    | POINT REGION                          {Past.Reg}
+
+quantifier:
+    | FORALL                                {Past.ForAll}
+    | EXISTS                                {Past.Exists}
+    | NFORALL                               {Past.NForAll}
+    | NEXISTS                               {Past.NExists}
+
 expr:
-    | simple_expr POINT CELLS               {Past.Utils(location(), $1, Past.Cells)}
-    | simple_expr POINT VALUE               {Past.Utils(location(), $1, Past.Value)}
-    | simple_expr POINT SIZE                {Past.Utils(location(), $1, Past.Size)}
-    | simple_expr POINT LENGTH              {Past.Utils(location(), $1, Past.Length)}
+    | simple_expr utils                     {Past.Utils(location(), $1, $2)}
     | simple_expr                           {$1}
     | LBRACK expr RBRACK                    {$2}
     | dec                                   {$1}
@@ -97,14 +106,10 @@ expr:
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
     | expr ADJACENT expr                    {Past.RegionOp(location(), $1, Past.Adjacent, $3)}
-    | FORALL dec IN group POINT LBRACK expr RBRACK
-                                            {Past.Quantifier(location(), Past.ForAll, $2, $4, $7)}
-    | EXISTS dec IN group POINT LBRACK expr RBRACK
-                                            {Past.Quantifier(location(), Past.Exists, $2, $4, $7)}
-    | FORALL dec POINT LBRACK expr RBRACK
-                                            {Past.Quantifier(location(), Past.ForAll, $2, Past.Grid, $5)}
-    | EXISTS dec POINT LBRACK expr RBRACK
-                                            {Past.Quantifier(location(), Past.Exists, $2, Past.Grid, $5)}
+    | quantifier dec IN group POINT LBRACK expr RBRACK
+                                            {Past.Quantifier(location(), $1, $2, $4, $7)}
+    | quantifier dec POINT LBRACK expr RBRACK
+                                            {Past.Quantifier(location(), $1, $2, Past.Grid, $5)}
 
 init:
     | GRID INT CROSS INT                    {(location(), $2, $4)}

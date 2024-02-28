@@ -42,7 +42,6 @@ type token =
   | NEXISTS
   | IN
   | CELLS
-  | VALUE
   | SIZE
   | LENGTH
   | ADJACENT
