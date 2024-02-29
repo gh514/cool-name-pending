@@ -24,17 +24,10 @@ type data_type =
   | Cell
   | Region
   | Line
-  | Set of data_type
 
 type unary_op = 
   | Neg
   | Not
-
-type utilities =
-  | Cells
-  | Value
-  | Size
-  | Length
 
 type quant =
   | ForAll
@@ -53,7 +46,6 @@ type expr =
   | UnaryOp of unary_op * expr
   | MultiOp of op * (expr list)
   | Dec of data_type * expr
-  | Utils of expr * utilities
   | Bundle of expr list
   | ITE of expr * expr * expr
   | Dead

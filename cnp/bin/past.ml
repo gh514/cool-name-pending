@@ -42,6 +42,7 @@ type utilities =
   | Size
   | Length
   | Reg
+  | Sum
 
 type quant =
   | ForAll

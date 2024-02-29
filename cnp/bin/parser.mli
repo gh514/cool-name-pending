@@ -44,6 +44,7 @@ type token =
   | CELLS
   | SIZE
   | LENGTH
+  | SUM
   | ADJACENT
   | EOF
 

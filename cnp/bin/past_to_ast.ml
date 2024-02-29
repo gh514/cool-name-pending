@@ -1,11 +1,10 @@
 
-
 include Printf
 
 exception Err of string
 
-let gridr = ref 2
-let gridc = ref 1
+let gridr = ref 0
+let gridc = ref 0
 let regions = ref false
 
 let translate_op = function
@@ -166,11 +165,11 @@ let get_children_constraints () =
 
   let children_constraints r c =
     let adj_cells = adj r c in
-    Ast.Op(Ast.Var(sprintf "r%ic%i_num" r c), Ast.Equal,
+    Ast.Op(Ast.Var(sprintf "r%ic%i_count" r c), Ast.Equal,
       Ast.MultiOp(Ast.Add, Ast.Integer(1) ::
         (let rec loop = function
           | ((_, _), (ry, cy))::ls -> Ast.ITE(
-            make_var_pair r c ry cy, Ast.Var(sprintf "r%ic%i_num" ry cy), Ast.Integer(0)) :: loop ls
+            make_var_pair r c ry cy, Ast.Var(sprintf "r%ic%i_count" ry cy), Ast.Integer(0)) :: loop ls
           | [] -> []
         in loop adj_cells
         )))
@@ -204,8 +203,9 @@ let get_root_constraints () =
   let root_constraints r c =
     Ast.Op(Ast.UnaryOp(Ast.Not, Ast.MultiOp(Ast.Or, 
       List.map (fun ((_, _), (rx, cx)) -> make_var_pair rx cx r c) (adj r c))), Ast.LeftImp,
-      Ast.Op(Ast.Op(Ast.Var(sprintf "r%ic%i_size" r c), Ast.Equal, Ast.Var(sprintf "r%ic%i_num" r c)),
-        Ast.And, Ast.Op(Ast.Var(sprintf "r%ic%i_root" r c), Ast.Equal, Ast.Integer((r-1)*n + c)))
+      Ast.MultiOp(Ast.And, [Ast.Op(Ast.Var(sprintf "r%ic%i_size" r c), Ast.Equal, Ast.Var(sprintf "r%ic%i_count" r c));
+        Ast.Op(Ast.Var(sprintf "r%ic%i_root" r c), Ast.Equal, Ast.Integer((r-1)*n + c));
+        Ast.Op(Ast.Var(sprintf "r%ic%i_num" r c), Ast.Equal, Ast.Var(sprintf "r%ic%i_sum" r c))])
       )
 
   in let rec root_loop r c =
@@ -216,20 +216,54 @@ let get_root_constraints () =
 
   in root_loop m n
 
+let sum_constraints f = 
+  let rec loop = function
+    | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Op(make_var_pair r1 c1 r2 c2, Ast.Or, make_var_pair r2 c2 r1 c1), Ast.LeftImp, 
+      Ast.Op(Ast.Var(sprintf "r%ic%i_sum" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_sum" r2 c2)))::(loop ls)
+    | [] -> []
+  in loop f
+
+let get_total_constraints () =
+  let m = !gridr in
+  let n = !gridc in
+  
+  let total_constraints r c =
+    let adj_cells = adj r c in
+    Ast.Op(Ast.Var(sprintf "r%ic%i_num" r c), Ast.Equal,
+      Ast.MultiOp(Ast.Add, Ast.Var(sprintf "r%ic%i" r c) ::
+        (let rec loop = function
+          | ((_, _), (ry, cy))::ls -> Ast.ITE(
+            make_var_pair r c ry cy, Ast.Var(sprintf "r%ic%i_num" ry cy), Ast.Integer(0)) :: loop ls
+          | [] -> []
+        in loop adj_cells
+        )))
+  
+  in let rec total_loop r c =
+    match (r, c) with
+    | 0, _ -> []
+    | _, 0 -> total_loop (r-1) n
+    | _, _ -> (total_constraints r c) :: total_loop r (c-1)
+  
+  in total_loop m n
+
 let init_regions _ =
   let grid = create_vars () in
   let field = List.map (fun v -> Ast.Dec(Ast.Bool, v)) (unzip (get_vars grid)) in
   let constr_field = direction_constraints (get_vars grid) in
   let size_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "size") in
-  let num_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "num") in
+  let count_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "count") in
   let root_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "root") in
+  let num_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "num") in
+  let sum_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "sum") in
   let parent_constr = get_parent_constraints () in
   let children_constr = get_children_constraints () in
   let size_constr = size_constraints grid in
   let root_constr = get_root_constraints () in
   let origin_constr = origin_constraints grid in
-    Ast.Bundle(field @ size_grid @ num_grid @ root_grid @ constr_field @ parent_constr
-     @ children_constr @ size_constr @ root_constr @ origin_constr)
+  let sum_constr = sum_constraints grid in
+  let total_constr = get_total_constraints () in
+    Ast.Bundle(field @ size_grid @ count_grid @ root_grid @ num_grid @ sum_grid @ constr_field @ parent_constr
+     @ children_constr @ size_constr @ root_constr @ origin_constr @ sum_constr @ total_constr)
 
 let translate_list xs = 
   let rec loop = function
@@ -257,39 +291,15 @@ and translate_dec d v e vars =
   match d with
   | Past.Int -> (Ast.Dec(Ast.Int, nv), (Ast.Int, nv, None)::vars)
   | Past.Cell -> (Ast.Dead, (Ast.Cell, nv, None)::vars)
-  | Past.Region -> if !regions then (
+  | Past.Region -> let init = if !regions then Ast.Dead else (regions := true; init_regions ()) in
     match e with
-    | Past.Instance(_, Past.List(_, l)) -> let rec loop = function
-      | Past.RC(_, r1, c1)::Past.RC(_, r2, c2)::ls -> Ast.Op(Ast.Var(sprintf "%r1"))
-    
-  
-  , (Ast.Region, nv, None)::vars)
-    else (regions:=true; (init_regions (), (Ast.Region, nv, None)::vars))
-    
-    (*let grid = bool_grid (get_var e) in 
-    let nlist = match v with 
-      | Some(Past.Group(_, Past.Instance(Past.List(_, list)))) -> List.map (fun rc -> 
-        let (expr, _) = translate_expr rc vars in expr) list in
-        (Ast.Dec(Ast.Region, Ast.Group(ne, grid)) ,(Past.Region, ne, Some grid)::vars)
-  
-    (Ast.Bundle(
-      Ast.Dec(Ast.Region, Ast.Group(ne, grid)) ::
-        List.map (fun x -> (List.map (fun c -> if Str.string_match (Str.regexp (get_var_ast c)) x 0 then c else Ast.UnaryOp(Ast.Neg, c)
-          
-          ) grid)) nlist
-    )
-
-    *)
-    
+    | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> 
+      let cells = List.map (fun (Past.RC(_, r, c)) -> (get_int r, get_int c)) l in
+      let (r_root, c_root) = List.hd cells in (Ast.Bundle(init::[Ast.MultiOp(Ast.And, List.map (fun (r, c) -> 
+        Ast.Op(Ast.Var(sprintf "R%iC%i_root" r c), Ast.Equal, Ast.Integer(!gridc*(r_root-1)+c_root))) cells)])
+      , (Ast.Region, nv, Some cells)::vars)
+    | None -> (init, (Ast.Region, nv, None)::vars)
   | _ -> raise (Err "Unimplemented datatype")
-
-  (*
-  | Past.Line -> let ex = translate_expr e vars in
-    match ex with 
-    | (v, vs) -> let field = bool_field !gridc !gridr in  
-      (Ast.Group(v, field), (v, Some field) :: vs)
-    | _ -> raise (Err "Line declaration error")
-*)
 
 and translate_group l g = match g with
   | Past.Grid -> cell_grid l
@@ -331,6 +341,7 @@ and translate_utils e u vars =
   match u with
   | Past.Size -> (Ast.Var(sprintf "%s_size" (get_var e)), vars)
   | Past.Reg -> (Ast.Var(sprintf "%s_root" (get_var e)), vars)
+  | Past.Sum -> (Ast.Var(sprintf "%s_sum" (get_var e)), vars)
 
 and translate_expr e vars = 
   match e with
@@ -350,11 +361,10 @@ and translate_expr e vars =
   | Past.Utils(_, e, u) -> translate_utils e u vars
 
 let rec clean = function
-  | Ast.Op(e1, _, e2) -> clean e1 & clean e2
+  | Ast.Op(e1, _, e2) -> clean e1 && clean e2
   | Ast.UnaryOp(_, e) -> clean e
   | Ast.Dec(_, e) -> clean e
-  | Ast.Utils(e, _) -> clean e
-  | Ast.ITE(e1, e2, e3) -> clean e1 & clean e2 & clean e3
+  | Ast.ITE(e1, e2, e3) -> clean e1 && clean e2 && clean e3
   | Ast.Dead -> false
   | _ -> true
 

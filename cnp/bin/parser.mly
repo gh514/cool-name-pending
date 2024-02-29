@@ -16,7 +16,7 @@ let location = Parsing.symbol_start_pos;;
 %token LEFTIMP RIGHTIMP BIIMP
 %token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON COMMA POINT
 %token FORALL EXISTS NFORALL NEXISTS IN
-%token CELLS SIZE LENGTH
+%token CELLS SIZE LENGTH SUM
 %token ADJACENT
 %token EOF
 
@@ -75,6 +75,7 @@ utils:
     | POINT SIZE                            {Past.Size}
     | POINT LENGTH                          {Past.Length}
     | POINT REGION                          {Past.Reg}
+    | POINT SUM                             {Past.Sum}
 
 quantifier:
     | FORALL                                {Past.ForAll}
