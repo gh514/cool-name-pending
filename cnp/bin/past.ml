@@ -70,6 +70,7 @@ and expr =
   | Assign of loc * expr * expr
   | List of loc * (expr list)
   | Group of loc * group
+  | Range of loc * expr * expr
 
 (*Line l = [R1C1 to R2C2, R2C2 to R2C3]*)
 

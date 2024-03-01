@@ -36,6 +36,7 @@ type token =
   | SEMICOLON
   | COMMA
   | POINT
+  | TO
   | FORALL
   | EXISTS
   | NFORALL

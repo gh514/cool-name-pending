@@ -14,13 +14,13 @@ let location = Parsing.symbol_start_pos;;
 %token AND OR NOT XOR
 %token EQUAL LT GT LTE GTE UNEQUAL
 %token LEFTIMP RIGHTIMP BIIMP
-%token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON COMMA POINT
+%token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON COMMA POINT TO
 %token FORALL EXISTS NFORALL NEXISTS IN
 %token CELLS SIZE LENGTH SUM
 %token ADJACENT
 %token EOF
 
-%left ADJACENT
+%left ADJACENT COMMA
 %left BIIMP
 %left LEFTIMP RIGHTIMP
 %left LT GT LTE GTE UNEQUAL NOT
@@ -48,19 +48,19 @@ simple_expr:
     | VAR                                   {Past.Var(location(), $1)}
     | ROW simple_expr COLUMN simple_expr    {Past.RC(location(), $2, $4)}
     | group                                 {Past.Group(location(), $1)}
-    | VAR POINT SIZE                        {Past.Utils(location(), Past.Var(location(), $1), Past.Size)}
+    | simple_expr TO simple_expr            {Past.Range(location(), $1, $3)}
+
+datatype:   
+    | INTDEC                                {Past.Int}
+    | BOOLDEC                               {Past.Bool}
+    | CELL                                  {Past.Cell}
+    | REGION                                {Past.Region}
+    | LINE                                  {Past.Line}
 
 dec:
-    | INTDEC simple_expr                            {Past.Dec(location(), Past.Int, $2, None)}
-    | INTDEC simple_expr EQUAL simple_expr          {Past.Dec(location(), Past.Int, $2, Some($4))}
-    | BOOLDEC simple_expr                           {Past.Dec(location(), Past.Bool, $2, None)}
-    | BOOLDEC simple_expr EQUAL simple_expr         {Past.Dec(location(), Past.Bool, $2, Some($4))}
-    | CELL simple_expr                              {Past.Dec(location(), Past.Cell, $2, None)}
-    | CELL simple_expr EQUAL simple_expr            {Past.Dec(location(), Past.Cell, $2, Some($4))}
-    | REGION simple_expr                            {Past.Dec(location(), Past.Region, $2, None)}
-    | REGION simple_expr EQUAL simple_expr          {Past.Dec(location(), Past.Region, $2, Some($4))}
-    | LINE simple_expr                              {Past.Dec(location(), Past.Line, $2, None)}
-    | LINE simple_expr EQUAL simple_expr            {Past.Dec(location(), Past.Line, $2, Some($4))}
+    | datatype simple_expr                            {Past.Dec(location(), $1, Past.List(location(), [$2]), None)}
+    | datatype simple_expr EQUAL simple_expr          {Past.Dec(location(), $1, Past.List(location(), [$2]), Some($4))}
+    | datatype list                                   {Past.Dec(location(), $1, Past.List(location(), $2), None)}
 
 group:
     | GRID                                  {Past.Grid}

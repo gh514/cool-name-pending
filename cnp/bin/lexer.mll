@@ -65,6 +65,7 @@ rule token = parse
     | ("Length")    {LENGTH}
     | ("Adj")       {ADJACENT}
     | ("Sum")       {SUM}
+    | ("To")        {TO}
     | int_regex     {INT (int_of_string (Lexing.lexeme lexbuf))}
     | var_regex     {VAR (Lexing.lexeme lexbuf)}
     | (newline)     {next_line lexbuf; token lexbuf}
