@@ -264,9 +264,24 @@ let init_regions _ =
     Ast.Bundle(field @ size_grid @ count_grid @ root_grid @ num_grid @ sum_grid @ constr_field @ parent_constr
      @ children_constr @ size_constr @ root_constr @ origin_constr @ sum_constr @ total_constr)
 
-let translate_list xs = 
+let translate_range rc1 rc2 =
+  match rc1, rc2 with
+  | Past.RC(l, r1, c1), Past.RC(_, r2, c2) -> 
+    let x1 = max (get_int r1) (get_int r2) in
+    let y1 = max (get_int c1) (get_int c2) in
+    let x2 = min (get_int r1) (get_int r2) in
+    let y2 = min (get_int c1) (get_int c2) in
+    let rec gen x y =
+      if x = x2 then 
+        if y = y2 then [(x, y)]
+        else (x, y)::(gen x1 (y-1))
+      else (x, y)::(gen (x-1) y)
+    in List.map (fun (r, c) -> (Past.RC(l, Past.Integer(l, r), Past.Integer(l, c)))) (gen x1 y1)
+
+let rec translate_list xs = 
   let rec loop = function
     | (Past.RC(l, r, c))::es -> Past.Var(l, sprintf "r%ic%i" (get_int r) (get_int c)) :: loop es
+    | (Past.Range(l, x, y))::es -> (translate_list (translate_range x y)) @ (loop es)
     | [] -> []
     | _ -> raise (Err "Some list thing")
   in loop xs
@@ -293,7 +308,7 @@ and translate_dec d v e vars =
     | Past.Region -> let init = if !regions then Ast.Dead else (regions := true; init_regions ()) in
       (match e with
       | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> 
-        translate_expr l vars 
+      (*  translate_expr l vars *)
 
 
         let cells = List.map (fun (Past.RC(_, r, c)) -> (get_int r, get_int c)) l in
@@ -363,20 +378,6 @@ and translate_utils e u vars =
   | Past.Reg -> (Ast.Var(sprintf "%s_root" (get_var e)), vars)
   | Past.Sum -> (Ast.Var(sprintf "%s_sum" (get_var e)), vars)
 
-and translate_range rc1 rc2 vars =
-  match rc1, rc2 with
-  | Past.RC(l, r1, c1), Past.RC(_, r2, c2) -> 
-    let x1 = max (get_int r1) (get_int r2) in
-    let y1 = max (get_int c1) (get_int c2) in
-    let x2 = min (get_int r1) (get_int r2) in
-    let y2 = min (get_int c1) (get_int c2) in
-    let rec gen x y =
-      if x = x2 then 
-        if y = y2 then [(x, y)]
-        else (x, y)::(gen x1 (y-1))
-      else (x, y)::(gen (x-1) y)
-    in (List.map (fun (r, c) -> (Past.RC(l, Past.Var(l, string_of_int r), Past.Var(l, string_of_int c)))) (gen x1 y1), vars)
-
 and translate_expr e vars = 
   match e with
   | Past.Integer(_, n) -> (Ast.Integer(n), vars)
@@ -393,7 +394,7 @@ and translate_expr e vars =
   | Past.Dec(_, d, v, e) -> translate_dec d v e vars
   | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c vars
   | Past.Utils(_, e, u) -> translate_utils e u vars
-  | Past.List()
+
 
 let rec clean = function
   | Ast.Op(e1, _, e2) -> clean e1 && clean e2
