@@ -23,45 +23,54 @@ type op =
   | BiImp
 
 type data_type = 
+  | Int
+  | Bool
   | Cell
   | Region
   | Line
-  | Set of data_type
 
 type unary_op = 
   | Neg
   | Not
+
+type region_op =
+  | Adjacent
 
 type utilities =
   | Cells
   | Value
   | Size
   | Length
+  | Reg
+  | Sum
 
 type quant =
   | ForAll
   | Exists
+  | NForAll
+  | NExists
 
 type group = 
   | Grid
   | Universe
-  | Instance of data_type
+  | Instance of expr
 
-type expr = 
+and expr = 
   | Integer of loc * int
   | Boolean of loc * bool
   | RC of loc * expr * expr
   | Var of loc * var
   | Op of loc * expr * op * expr
   | UnaryOp of loc * unary_op * expr
+  | RegionOp of loc * expr * region_op * expr
   | Seq of loc * (expr list)
-  | Grid of loc * int * int
-  | Dec of loc * data_type * expr
+  | Dec of loc * data_type * expr * (expr option)
   | Utils of loc * expr * utilities
-  | Quantifier of loc * quant * expr * expr * expr
-  | Group of group
+  | Quantifier of loc * quant * expr * group * expr
   | Assign of loc * expr * expr
-  | List of loc * ((expr * expr) list)
+  | List of loc * (expr list)
+  | Group of loc * group
+  | Range of loc * expr * expr
 
 (*Line l = [R1C1 to R2C2, R2C2 to R2C3]*)
 

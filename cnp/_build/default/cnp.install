@@ -1,0 +1,8 @@
+lib: [
+  "_build/install/default/lib/cnp/META"
+  "_build/install/default/lib/cnp/dune-package"
+  "_build/install/default/lib/cnp/opam"
+]
+bin: [
+  "_build/install/default/bin/cnp"
+]
