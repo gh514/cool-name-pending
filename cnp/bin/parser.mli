@@ -8,10 +8,12 @@ type token =
   | CELL
   | REGION
   | LINE
-  | ROW
-  | COLUMN
+  | R
+  | C
   | INTDEC
   | BOOLDEC
+  | ROW
+  | COLUMN
   | ADD
   | SUB
   | MUL

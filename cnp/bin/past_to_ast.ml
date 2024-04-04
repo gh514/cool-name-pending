@@ -28,6 +28,10 @@ let translate_unary_op = function
   | Past.Neg -> Ast.Neg
   | Past.Not -> Ast.Not
 
+let get_int1 = function
+  | Past.Integer(_, n) -> n
+  | Past.Range(_, _, _) -> printf "range"; 4
+
 let get_int = function
   | Past.Integer(_, n) -> n
 
@@ -67,38 +71,14 @@ let cells () =
     | _, _ -> (r, c) :: loop r (c-1)
   in loop m n
 
-let cell_grid l = 
-  let m = !gridr in
-  let n = !gridc in
-  let rec loop r c =
-    match r, c with
-    | 0, _ -> []
-    | _, 0 -> loop (r-1) n
-    | _, _ -> Past.Var(l, sprintf "r%ic%i" r c) :: (loop r (c-1))
-  in loop m n
+let cell_grid l = List.map (fun (r, c) -> Past.Var(l, sprintf "r%ic%i" r c)) (cells ())
 
-let bool_grid reg =
-  let m = !gridr in
-  let n = !gridc in
-  let rec loop r c =
-    match r, c with
-    | 0, _ -> []
-    | _, 0 -> loop (r-1) n
-    | _, _ -> Ast.Var(sprintf "r%ic%i_in_%s" r c reg) :: (loop r (c-1))
-  in loop m n
+let bool_grid reg = List.map (fun (r, c) -> Ast.Var(sprintf "r%ic%i_in_%s" r c reg)) (cells ())
 
-let int_grid str = 
-  let m = !gridr in
-  let n = !gridc in
-  let rec loop r c =
-    match r, c with
-    | 0, _ -> []
-    | _, 0 -> loop (r-1) n
-    | _, _ -> Ast.Var(sprintf "r%ic%i_%s" r c str) :: (loop r (c-1))
-  in loop m n
+let int_grid str = List.map (fun (r, c) -> Ast.Var(sprintf "r%ic%i_%s" r c str)) (cells ())
 
-let rec unzip = function
-  | (a, b)::ls -> a::b::(unzip ls)
+let rec unpair = function
+  | (a, b)::ls -> a::b::(unpair ls)
   | [] -> []
 
 let adj r c = 
@@ -124,8 +104,9 @@ let create_vars () =
 let get_vars pairs = List.map (fun ((r1, c1), (r2, c2)) -> 
   (make_var_pair r1 c1 r2 c2, make_var_pair r2 c2 r1 c1)) pairs
 
-let create_line l = let Ast.Var(nl) = l in List.map (fun (Ast.Var(v1), Ast.Var(v2)) 
-  -> (Ast.Var(sprintf "%s_%s" nl v1), Ast.Var(sprintf "%s_%s" nl v2))) (get_vars (create_vars ()))
+let create_line l = 
+  let Ast.Var(nl) = l in 
+  (List.map (fun ((r1, c1), (r2, c2)) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i-r%ic%i" nl r1 c1 r2 c2))) (create_vars ()))
 
 let direction_constraints f = 
   let rec loop = function
@@ -133,10 +114,13 @@ let direction_constraints f =
     | [] -> []
   in loop f
 
-let get_parent_constraints () = 
-  let m = !gridr in
-  let n = !gridc in
+let rec constr_loop r c func =
+  match (r, c) with
+    | 0, _ -> []
+    | _, 0 -> constr_loop (r-1) (!gridc) func
+    | _, _ -> (func r c) @ constr_loop r (c-1) func
 
+let get_parent_constraints () = 
   let rec parent_constraints r c =
     let adj_cells = adj r c in
     List.map (fun ((_, _), (rx, cx)) -> 
@@ -147,80 +131,46 @@ let get_parent_constraints () =
           | [] -> []
         in loop (List.filter (fun ((_, _), (rz, cz)) -> not ((rx, cx) = (rz, cz))) adj_cells)
         ))
-    )))
-    adj_cells
+    ))) adj_cells
 
-  in let rec parent_loop r c = 
-    match (r, c) with
-    | 0, _ -> []
-    | _, 0 -> parent_loop (r-1) n
-    | _, _ -> (parent_constraints r c) @ parent_loop r (c-1)
-
-  in parent_loop m n
+  in constr_loop !gridr !gridc parent_constraints
 
 let get_children_constraints () =
-  let m = !gridr in
-  let n = !gridc in
-
   let children_constraints r c =
     let adj_cells = adj r c in
-    Ast.Op(Ast.Var(sprintf "r%ic%i_count" r c), Ast.Equal,
+    [Ast.Op(Ast.Var(sprintf "r%ic%i_count" r c), Ast.Equal,
       Ast.MultiOp(Ast.Add, Ast.Integer(1) ::
         (let rec loop = function
           | ((_, _), (ry, cy))::ls -> Ast.ITE(
             make_var_pair r c ry cy, Ast.Var(sprintf "r%ic%i_count" ry cy), Ast.Integer(0)) :: loop ls
           | [] -> []
         in loop adj_cells
-        )))
+        )))]
+  in constr_loop !gridr !gridc children_constraints
 
-  in let rec child_loop r c =
-    match (r, c) with
-    | 0, _ -> []
-    | _, 0 -> child_loop (r-1) n
-    | _, _ -> (children_constraints r c) :: child_loop r (c-1)
+let rec size_constraints = function
+  | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Op(make_var_pair r1 c1 r2 c2, Ast.Or, make_var_pair r2 c2 r1 c1), Ast.LeftImp, 
+    Ast.Op(Ast.Var(sprintf "r%ic%i_size" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_size" r2 c2))) :: (size_constraints ls)
+  | [] -> []
 
-  in child_loop m n
-
-let size_constraints f =
-  let rec loop = function
-    | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Op(make_var_pair r1 c1 r2 c2, Ast.Or, make_var_pair r2 c2 r1 c1), Ast.LeftImp, 
-      Ast.Op(Ast.Var(sprintf "r%ic%i_size" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_size" r2 c2))) :: (loop ls)
-    | [] -> []
-  in loop f
-
-let origin_constraints f = 
-  let rec loop = function
-    | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Op(make_var_pair r1 c1 r2 c2, Ast.Or, make_var_pair r2 c2 r1 c1), Ast.LeftImp, 
-      Ast.Op(Ast.Var(sprintf "r%ic%i_root" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_root" r2 c2)))::(loop ls)
-    | [] -> []
-  in loop f
+let rec origin_constraints = function
+  | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Op(make_var_pair r1 c1 r2 c2, Ast.Or, make_var_pair r2 c2 r1 c1), Ast.LeftImp, 
+    Ast.Op(Ast.Var(sprintf "r%ic%i_root" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_root" r2 c2)))::(origin_constraints ls)
+  | [] -> []
 
 let get_root_constraints () =
-  let m = !gridr in
-  let n = !gridc in
-
   let root_constraints r c =
-    Ast.Op(Ast.UnaryOp(Ast.Not, Ast.MultiOp(Ast.Or, 
+    [Ast.Op(Ast.UnaryOp(Ast.Not, Ast.MultiOp(Ast.Or, 
       List.map (fun ((_, _), (rx, cx)) -> make_var_pair rx cx r c) (adj r c))), Ast.LeftImp,
       Ast.MultiOp(Ast.And, [Ast.Op(Ast.Var(sprintf "r%ic%i_size" r c), Ast.Equal, Ast.Var(sprintf "r%ic%i_count" r c));
-        Ast.Op(Ast.Var(sprintf "r%ic%i_root" r c), Ast.Equal, Ast.Integer((r-1)*n + c));
-        Ast.Op(Ast.Var(sprintf "r%ic%i_num" r c), Ast.Equal, Ast.Var(sprintf "r%ic%i_sum" r c))])
-      )
+        Ast.Op(Ast.Var(sprintf "r%ic%i_root" r c), Ast.Equal, Ast.Integer((r-1)*(!gridc) + c));
+        Ast.Op(Ast.Var(sprintf "r%ic%i_num" r c), Ast.Equal, Ast.Var(sprintf "r%ic%i_sum" r c))]))]
+  in constr_loop !gridr !gridc root_constraints
 
-  in let rec root_loop r c =
-    match (r, c) with
-    | 0, _ -> []
-    | _, 0 -> root_loop (r-1) n
-    | _, _ -> (root_constraints r c) :: root_loop r (c-1)
-
-  in root_loop m n
-
-let sum_constraints f = 
-  let rec loop = function
-    | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Op(make_var_pair r1 c1 r2 c2, Ast.Or, make_var_pair r2 c2 r1 c1), Ast.LeftImp, 
-      Ast.Op(Ast.Var(sprintf "r%ic%i_sum" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_sum" r2 c2)))::(loop ls)
-    | [] -> []
-  in loop f
+let rec sum_constraints = function
+  | ((r1, c1), (r2, c2)) :: ls -> Ast.Op(Ast.Op(make_var_pair r1 c1 r2 c2, Ast.Or, make_var_pair r2 c2 r1 c1), Ast.LeftImp, 
+    Ast.Op(Ast.Var(sprintf "r%ic%i_sum" r1 c1), Ast.Equal, Ast.Var(sprintf "r%ic%i_sum" r2 c2)))::(sum_constraints ls)
+  | [] -> []
 
 let get_total_constraints () =
   let m = !gridr in
@@ -228,26 +178,20 @@ let get_total_constraints () =
   
   let total_constraints r c =
     let adj_cells = adj r c in
-    Ast.Op(Ast.Var(sprintf "r%ic%i_num" r c), Ast.Equal,
+    [Ast.Op(Ast.Var(sprintf "r%ic%i_num" r c), Ast.Equal,
       Ast.MultiOp(Ast.Add, Ast.Var(sprintf "r%ic%i" r c) ::
         (let rec loop = function
           | ((_, _), (ry, cy))::ls -> Ast.ITE(
             make_var_pair r c ry cy, Ast.Var(sprintf "r%ic%i_num" ry cy), Ast.Integer(0)) :: loop ls
           | [] -> []
         in loop adj_cells
-        )))
+        )))]
   
-  in let rec total_loop r c =
-    match (r, c) with
-    | 0, _ -> []
-    | _, 0 -> total_loop (r-1) n
-    | _, _ -> (total_constraints r c) :: total_loop r (c-1)
-  
-  in total_loop m n
+  in constr_loop !gridr !gridc total_constraints
 
 let init_regions _ =
   let grid = create_vars () in
-  let field = List.map (fun v -> Ast.Dec(Ast.Bool, v)) (unzip (get_vars grid)) in
+  let field = List.map (fun v -> Ast.Dec(Ast.Bool, v)) (unpair (get_vars grid)) in
   let constr_field = direction_constraints (get_vars grid) in
   let size_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "size") in
   let count_grid = List.map (fun v -> Ast.Dec(Ast.Int, v)) (int_grid "count") in
@@ -280,8 +224,8 @@ let translate_range rc1 rc2 =
 
 let rec translate_list xs = 
   let rec loop = function
-    | (Past.RC(l, r, c))::es -> Past.Var(l, sprintf "r%ic%i" (get_int r) (get_int c)) :: loop es
     | (Past.Range(l, x, y))::es -> (translate_list (translate_range x y)) @ (loop es)
+    | z::es -> z :: loop es
     | [] -> []
     | _ -> raise (Err "Some list thing")
   in loop xs
@@ -299,6 +243,21 @@ and translate_unary_term uop e vars =
   let (expr, _) = translate_expr e vars in
   (Ast.UnaryOp(translate_unary_op uop, expr), vars)
 
+and translate_line l v =
+  let rec unpack = function
+    | Past.Range(_, rc1, e2) -> rc1 :: (unpack e2)
+    | x -> [x]
+  in let rec pair = function
+    | rc1::rc2::xs -> (rc1, rc2) :: (rc2, rc1) :: (pair (rc2::xs))
+    | _ -> []
+  in let rec loop = function
+    | e::es -> (pair (List.map (fun (Past.RC(_, r, c)) -> (get_int r, get_int c)) (unpack e))) @ (loop es)
+    | [] -> []
+  in let lines = loop l
+  in List.map (fun ((r1, c1), (r2, c2)) -> (let t = Ast.Var(sprintf "%s_r%ic%i-r%ic%i" v r1 c1 r2 c2)
+    in if List.mem ((r1, c1), (r2, c2)) lines 
+    then t else Ast.UnaryOp(Ast.Not, t))) (create_vars ())
+
 and translate_dec d v e vars = 
   let helper v vars =
     let (nv, _) = translate_expr v vars in
@@ -308,15 +267,15 @@ and translate_dec d v e vars =
     | Past.Region -> let init = if !regions then Ast.Dead else (regions := true; init_regions ()) in
       (match e with
       | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> 
-      (*  translate_expr l vars *)
-
-
-        let cells = List.map (fun (Past.RC(_, r, c)) -> (get_int r, get_int c)) l in
+        let cells = List.map (fun (Past.RC(_, r, c)) -> (get_int r, get_int c)) (translate_list l) in
         let (r_root, c_root) = List.hd cells in (Ast.Bundle(init::[Ast.MultiOp(Ast.And, List.map (fun (r, c) -> 
           Ast.Op(Ast.Var(sprintf "R%iC%i_root" r c), Ast.Equal, Ast.Integer(!gridc*(r_root-1)+c_root))) cells)])
         , (Ast.Region, nv, Some cells)::vars)
       | None -> (init, (Ast.Region, nv, None)::vars))
-    | Past.Line -> (Ast.Bundle(unzip (create_line nv)), (Ast.Line, nv, None)::vars)
+    | Past.Line -> let init = create_line nv in 
+      match e with
+      | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> 
+        (Ast.Bundle(init @ (translate_line l (get_var v))), (Ast.Line, nv, None)::vars)
     | _ -> raise (Err "Unimplemented datatype")
 
   in let rec loop vars = function
@@ -394,7 +353,6 @@ and translate_expr e vars =
   | Past.Dec(_, d, v, e) -> translate_dec d v e vars
   | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c vars
   | Past.Utils(_, e, u) -> translate_utils e u vars
-
 
 let rec clean = function
   | Ast.Op(e1, _, e2) -> clean e1 && clean e2

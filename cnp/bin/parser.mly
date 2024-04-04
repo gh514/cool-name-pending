@@ -9,7 +9,7 @@ let location = Parsing.symbol_start_pos;;
 %token <int> INT
 %token <string> VAR
 %token TRUE FALSE
-%token GRID CROSS CELL REGION LINE ROW COLUMN INTDEC BOOLDEC
+%token GRID CROSS CELL REGION LINE R C INTDEC BOOLDEC ROW COLUMN
 %token ADD SUB MUL DIV
 %token AND OR NOT XOR
 %token EQUAL LT GT LTE GTE UNEQUAL
@@ -27,9 +27,11 @@ let location = Parsing.symbol_start_pos;;
 %left MUL DIV OR XOR
 %left ADD SUB AND
 
+%right TO
+
 %nonassoc POINT
 %nonassoc INTDEC BOOLDEC CELL REGION LINE CROSS
-%nonassoc LBRACK RBRACK LSBRACK RSBRACK EQUAL GRID VAR
+%nonassoc LBRACK RBRACK LSBRACK RSBRACK EQUAL GRID VAR R C
 
 %start main
 %type <((Lexing.position * int * int) * Past.expr list)> main
@@ -46,7 +48,7 @@ simple_expr:
     | FALSE                                 {Past.Boolean(location(), false)}
     | INT                                   {Past.Integer(location(), $1)}
     | VAR                                   {Past.Var(location(), $1)}
-    | ROW simple_expr COLUMN simple_expr    {Past.RC(location(), $2, $4)}
+    | R simple_expr C simple_expr           {Past.RC(location(), $2, $4)}
     | group                                 {Past.Group(location(), $1)}
     | simple_expr TO simple_expr            {Past.Range(location(), $1, $3)}
 

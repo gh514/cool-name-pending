@@ -22,13 +22,15 @@ rule token = parse
     | [' ' '\t']    {token lexbuf}
     | ("Grid")      {GRID}
     | ('X')         {CROSS}
-    | ('R')         {ROW}
-    | ('C')         {COLUMN}
+    | ('R')         {R}
+    | ('C')         {C}
     | ("Cell")      {CELL}
     | ("Region")    {REGION}
     | ("Line")      {LINE}
     | ("Int")       {INTDEC}
     | ("Bool")      {BOOLDEC}
+    | ("Row")       {ROW}
+    | ("Column")    {COLUMN}
     | ('+')         {ADD}
     | ('-')         {SUB}
     | ('*')         {MUL}
