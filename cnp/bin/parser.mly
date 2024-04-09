@@ -12,20 +12,20 @@ let location = Parsing.symbol_start_pos;;
 %token GRID CROSS CELL REGION LINE R C INTDEC BOOLDEC ROW COLUMN
 %token ADD SUB MUL DIV
 %token AND OR NOT XOR
-%token EQUAL LT GT LTE GTE UNEQUAL
+%token EQUAL LT GT LTE GTE UNEQUAL MEMBER
 %token LEFTIMP RIGHTIMP BIIMP
-%token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON COMMA POINT TO
+%token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON POINT TO COMMA
 %token FORALL EXISTS NFORALL NEXISTS IN
 %token CELLS SIZE LENGTH SUM
 %token ADJACENT
 %token EOF
 
-%left ADJACENT COMMA
+%left ADJACENT
 %left BIIMP
 %left LEFTIMP RIGHTIMP
 %left LT GT LTE GTE UNEQUAL NOT
-%left MUL DIV OR XOR
-%left ADD SUB AND
+%left MUL DIV OR XOR COMMA
+%left ADD SUB AND MEMBER
 
 %right TO
 
@@ -37,7 +37,6 @@ let location = Parsing.symbol_start_pos;;
 %type <((Lexing.position * int * int) * Past.expr list)> main
 %type <Past.expr> simple_expr
 %type <Past.expr> expr
-%type <Past.expr list> expr_list
 
 %%main:
     | init expr_list EOF                    {($1, $2)}
@@ -49,7 +48,6 @@ simple_expr:
     | INT                                   {Past.Integer(location(), $1)}
     | VAR                                   {Past.Var(location(), $1)}
     | R simple_expr C simple_expr           {Past.RC(location(), $2, $4)}
-    | group                                 {Past.Group(location(), $1)}
     | simple_expr TO simple_expr            {Past.Range(location(), $1, $3)}
 
 datatype:   
@@ -60,9 +58,8 @@ datatype:
     | LINE                                  {Past.Line}
 
 dec:
-    | datatype simple_expr                            {Past.Dec(location(), $1, Past.List(location(), [$2]), None)}
-    | datatype simple_expr EQUAL simple_expr          {Past.Dec(location(), $1, Past.List(location(), [$2]), Some($4))}
-    | datatype list                                   {Past.Dec(location(), $1, Past.List(location(), $2), None)}
+    | datatype list EQUAL simple_expr       {Past.Dec(location(), $1, Past.List(location(), $2), Some($4))}
+    | datatype list                         {Past.Dec(location(), $1, Past.List(location(), $2), None)}
 
 group:
     | GRID                                  {Past.Grid}
@@ -99,6 +96,7 @@ expr:
     | expr OR expr                          {Past.Op(location(), $1, Past.Or, $3)}
     | expr XOR expr                         {Past.Op(location(), $1, Past.Xor, $3)}
     | NOT expr                              {Past.UnaryOp(location(), Past.Not, $2)}
+    | expr EQUAL group                      {Past.Assign(location(), $1, $3)}
     | expr EQUAL expr                       {Past.Op(location(), $1, Past.Equal, $3)}
     | expr LT expr                          {Past.Op(location(), $1, Past.LT, $3)}
     | expr GT expr                          {Past.Op(location(), $1, Past.GT, $3)}
@@ -113,6 +111,7 @@ expr:
                                             {Past.Quantifier(location(), $1, $2, $4, $7)}
     | quantifier dec POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), $1, $2, Past.Grid, $5)}
+    | list MEMBER expr                      {Past.Member(location(), Past.List(location(), $1), $3)}
 
 init:
     | GRID INT CROSS INT                    {(location(), $2, $4)}

@@ -28,6 +28,7 @@ type token =
   | LTE
   | GTE
   | UNEQUAL
+  | MEMBER
   | LEFTIMP
   | RIGHTIMP
   | BIIMP
@@ -36,9 +37,9 @@ type token =
   | LSBRACK
   | RSBRACK
   | SEMICOLON
-  | COMMA
   | POINT
   | TO
+  | COMMA
   | FORALL
   | EXISTS
   | NFORALL
