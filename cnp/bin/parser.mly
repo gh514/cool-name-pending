@@ -49,6 +49,7 @@ simple_expr:
     | VAR                                   {Past.Var(location(), $1)}
     | R simple_expr C simple_expr           {Past.RC(location(), $2, $4)}
     | simple_expr TO simple_expr            {Past.Range(location(), $1, $3)}
+    | group                                 {Past.Group(location(), $1)}
 
 datatype:   
     | INTDEC                                {Past.Int}
@@ -64,6 +65,7 @@ dec:
 group:
     | GRID                                  {Past.Grid}
     | LSBRACK list RSBRACK                  {Past.Instance(Past.List(location(), $2))}
+    | VAR                                   {Past.Instance(Past.Var(location(), $1))}
 
 list:
     | simple_expr                           {[$1]}

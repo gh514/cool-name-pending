@@ -28,10 +28,6 @@ let translate_unary_op = function
   | Past.Neg -> Ast.Neg
   | Past.Not -> Ast.Not
 
-let get_int1 = function
-  | Past.Integer(_, n) -> n
-  | Past.Range(_, _, _) -> printf "range"; 4
-
 let get_int = function
   | Past.Integer(_, n) -> n
 
@@ -40,6 +36,14 @@ let get_bool = function
 
 let get_var = function
   | Past.Var(_, v) -> v
+
+let get_var1 = function
+  | Past.Var(_, v) -> v
+  | Past.Range(_, _, _) -> printf "found"; "a"
+  | Past.List(_, _) -> printf "found"; "a"
+  | Past.Group(_, _) -> printf "found"; "a"
+  | Past.Member(_, _, _) -> printf "found"; "a"
+  | Past.Range(_, _, _) -> printf "found"; "a"
 
 let get_var_ast = function
   | Ast.Var(v) -> v
@@ -106,8 +110,8 @@ let get_vars pairs = List.map (fun ((r1, c1), (r2, c2)) ->
 
 let create_line l = 
   let Ast.Var(nl) = l in 
-  Ast.Bundle((List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" nl r c))) (cells ()))
-    @ (List.map (fun ((r1, c1), (r2, c2)) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i-r%ic%i" nl r1 c1 r2 c2))) (create_vars ())))
+  (List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" nl r c))) (cells ()))
+    @ (List.map (fun ((r1, c1), (r2, c2)) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i-r%ic%i" nl r1 c1 r2 c2))) (create_vars ()))
 
 let direction_constraints f = 
   let rec loop = function
@@ -206,8 +210,8 @@ let init_regions _ =
   let origin_constr = origin_constraints grid in
   let sum_constr = sum_constraints grid in
   let total_constr = get_total_constraints () in
-    Ast.Bundle(field @ size_grid @ count_grid @ root_grid @ num_grid @ sum_grid @ constr_field @ parent_constr
-     @ children_constr @ size_constr @ root_constr @ origin_constr @ sum_constr @ total_constr)
+    field @ size_grid @ count_grid @ root_grid @ num_grid @ sum_grid @ constr_field @ parent_constr
+     @ children_constr @ size_constr @ root_constr @ origin_constr @ sum_constr @ total_constr
 
 let translate_line l v =
   let rec unpack = function
@@ -220,10 +224,12 @@ let translate_line l v =
   | e::es -> (List.map (fun (Past.RC(_, r, c)) -> (get_int r, get_int c)) (unpack e)) :: (loop es)
   | [] -> []
   in let lines = loop l
+  in let flat = List.concat lines
+  in let pairs = List.concat_map pair lines
   in List.map (fun (r, c) -> let t = Ast.Var(sprintf "%s_r%ic%i" v r c)
-    in if List.mem (r, c) (List.flatten lines) then t else Ast.UnaryOp(Ast.Not, t)) (cells ())
-  @ List.map (fun ((r1, c1), (r2, c2)) -> (let t = Ast.Var(sprintf "%s_r%ic%i-r%ic%i" v r1 c1 r2 c2)
-  in if List.mem ((r1, c1), (r2, c2)) (List.concat (List.map pair lines)) then t else Ast.UnaryOp(Ast.Not, t))) (create_vars ())
+    in if List.mem (r, c) flat then t else Ast.UnaryOp(Ast.Not, t)) (cells ())
+    @ List.map (fun ((r1, c1), (r2, c2)) -> (let t = Ast.Var(sprintf "%s_r%ic%i-r%ic%i" v r1 c1 r2 c2)
+    in if List.mem ((r1, c1), (r2, c2)) pairs then t else Ast.UnaryOp(Ast.Not, t))) (create_vars ())
 
 let rec match_var v = function
   | x::xs -> if Str.string_match (Str.regexp (get_var x)) v 0 then true else match_var v xs
@@ -242,6 +248,23 @@ let expand_range rc1 rc2 =
         else (x, y)::(gen x1 (y-1))
       else (x, y)::(gen (x-1) y)
     in List.map (fun (r, c) -> (Past.RC(l, Past.Integer(l, r), Past.Integer(l, c)))) (gen x1 y1)
+
+let rec expand_list xs = 
+  let rec loop = function
+    | (Past.Range(l, x, y))::es -> (expand_list (expand_range x y)) @ (loop es)
+    | z::es -> z :: loop es
+    | [] -> []
+  in loop xs
+
+let define_region l init nv vars = 
+  let cells = List.map (fun (Past.RC(_, r, c)) -> (get_int r, get_int c)) (expand_list l)
+  in let (r_root, c_root) = List.hd cells in (Ast.Bundle(init@[Ast.MultiOp(Ast.And, List.map (fun (r, c) -> 
+    Ast.Op(Ast.Var(sprintf "r%ic%i_root" r c), Ast.Equal, Ast.Integer(!gridc*(r_root-1)+c_root))) cells)])
+    , (Ast.Region, nv, Some cells)::vars)
+
+let rec find v = function
+  | (dt, nv, e)::nvars -> if nv = v then (dt, e) else find v nvars
+  | [] -> raise (Err "Variable not declared")
 
 let rec translate_term e1 op e2 vars =
   let (expr1, vars1) = translate_expr e1 vars in
@@ -269,21 +292,17 @@ and translate_dec d v e vars =
     let (nv, _) = translate_expr v vars in
     match d with
     | Past.Int -> (Ast.Dec(Ast.Int, nv), (Ast.Int, nv, None)::vars)
-    | Past.Cell -> (Ast.Dead, (Ast.Cell, nv, None)::vars)
-    | Past.Region -> let init = if !regions then Ast.Dead else (regions := true; init_regions ()) in
+    | Past.Cell -> (match e with 
+      | None -> (Ast.Dead, (Ast.Cell, nv, None)::vars))
+    | Past.Region -> let init = if !regions then [] else (regions := true; init_regions ()) in
       (match e with
-      | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> 
-        let cells = List.map (fun (Past.RC(_, r, c)) -> (get_int r, get_int c)) (expand_list l)
-        in let (r_root, c_root) = List.hd cells in (Ast.Bundle(init::[Ast.MultiOp(Ast.And, List.map (fun (r, c) -> 
-          Ast.Op(Ast.Var(sprintf "R%iC%i_root" r c), Ast.Equal, Ast.Integer(!gridc*(r_root-1)+c_root))) cells)])
-        , (Ast.Region, nv, Some cells)::vars)
-      | None -> (init, (Ast.Region, nv, None)::vars))
+      | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> define_region l init nv vars
+      | None -> (Ast.Bundle(init), (Ast.Region, nv, None)::vars))
     | Past.Line -> let init = create_line nv in 
       (match e with
       | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> 
-        (Ast.Bundle(init::(translate_line l (get_var v))), (Ast.Line, nv, None)::vars)
-      | None -> (init, (Ast.Line, nv, None)::vars)
-      )
+        (Ast.Bundle(init@(translate_line l (get_var v))), (Ast.Line, nv, None)::vars)
+      | None -> (Ast.Bundle(init), (Ast.Line, nv, None)::vars))
     | _ -> raise (Err "Unimplemented datatype")
   in let rec loop vars = function
     | v::vs -> let (ne, nvars) = helper v vars in (ne, nvars)::(loop nvars vs)
@@ -292,6 +311,13 @@ and translate_dec d v e vars =
   in match v with 
   | Past.List(_, l) -> let nl = loop vars l in
     let (es, vs) = List.split nl in (Ast.Bundle(es), List.nth vs ((List.length vs)-1))
+
+and translate_assignment v e vars = 
+  let (v1, _) = translate_expr v vars
+  in match find v1 vars with
+    | Ast.Region, _ -> let Past.Instance(Past.List(_, l)) = e in define_region l [] v1 vars
+    | Ast.Line, _ -> let Past.Instance(Past.List(_, l)) = e in 
+      (Ast.Bundle(translate_line l (get_var v)), (Ast.Line, v1, None)::vars)
 
 and translate_utils e u vars =
   match u with
@@ -310,7 +336,7 @@ and translate_quantifier l q d g c vars =
     | Past.Dec(_, Past.Cell, Past.List(_, var), value) -> 
       let split = function
       | [vx] -> Ast.MultiOp(op, (List.map (fun v -> let (expr, _) = 
-        translate_expr (substitute (get_var v) (get_var vx) c) vars in expr) (translate_group l g)))
+        translate_expr (substitute (get_var1 v) (get_var vx) c) vars in expr) (translate_group l g vars)))
       | vx::vs -> let (nv, _) = translate_quantifier l q (Past.Dec(l, Past.Cell, Past.List(l, [vx]), value)) g
         (Past.Quantifier(l, q, (Past.Dec(l, Past.Cell, Past.List(l, vs), value)), g, c)) vars
         in nv
@@ -325,16 +351,13 @@ and translate_quantifier l q d g c vars =
       in let (reg, _) = translate_expr d vars in
       (Ast.Bundle(reg::[split r]), vars)
 
-and expand_list xs = 
-  let rec loop = function
-  | (Past.Range(l, x, y))::es -> (expand_list (expand_range x y)) @ (loop es)
-  | z::es -> z :: loop es
-  | [] -> []
-  in loop xs
-
-and translate_group l g = match g with
+and translate_group l g vars = match g with
   | Past.Grid -> cell_grid l
-  | Past.Instance(Past.List(_, es)) -> expand_list es
+  | Past.Instance(e) -> (match e with
+    | Past.List(_, es) -> List.map (fun (Past.RC(l, Past.Integer(_, r), Past.Integer(_, c))) -> Past.Var(l, sprintf "r%ic%i" r c)) (expand_list es)
+    | Past.Var(_, v) -> let (_, Some ls) = find (Ast.Var(v)) vars
+      in List.map (fun (r, c) -> Past.Var(l, sprintf "r%ic%i" r c)) ls
+      )
 
 and translate_list ls vars = 
   let rec loop = function
@@ -370,6 +393,7 @@ and translate_expr e vars =
   | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e vars
   | Past.RegionOp(_, e1, rop, e2) -> translate_region_term e1 rop e2 vars
   | Past.Dec(_, d, v, e) -> translate_dec d v e vars
+  | Past.Assign(_, v, e) -> translate_assignment v e vars
   | Past.Utils(_, e, u) -> translate_utils e u vars
   | Past.Quantifier(l, q, d, g, c) -> translate_quantifier l q d g c vars
   | Past.List(_, l) -> translate_list l vars
