@@ -25,12 +25,17 @@ rule token = parse
     | ('R')         {R}
     | ('C')         {C}
     | ("Cell")      {CELL}
+    | ("Cells")     {CELL}
     | ("Region")    {REGION}
+    | ("Regions")   {REGION}
     | ("Line")      {LINE}
+    | ("Lines")     {LINE}
     | ("Int")       {INTDEC}
     | ("Bool")      {BOOLDEC}
     | ("Row")       {ROW}
+    | ("Rows")      {ROW}
     | ("Column")    {COLUMN}
+    | ("Columns")   {COLUMN}
     | ('+')         {ADD}
     | ('-')         {SUB}
     | ('*')         {MUL}
@@ -56,13 +61,11 @@ rule token = parse
     | (']')         {RSBRACK}
     | (';')         {SEMICOLON}
     | (',')         {COMMA}
-    | ("in")        {IN}
     | ("Forall")    {FORALL}
     | ("Exists")    {EXISTS}
     | ("!Forall")   {NFORALL}
     | ("!Exists")   {NEXISTS}
     | ('.')         {POINT}
-    | ("Cells")     {CELLS}
     | ("Size")      {SIZE}
     | ("Length")    {LENGTH}
     | ("Adj")       {ADJACENT}
@@ -72,6 +75,7 @@ rule token = parse
     | ("In")        {MEMBER}
     | ("Are")       {ARE}
     | ("Distinct")  {DISTINCT}
+    | ("Equal")     {EQUIVALENT}
     | int_regex     {INT (int_of_string (Lexing.lexeme lexbuf))}
     | var_regex     {VAR (Lexing.lexeme lexbuf)}
     | (newline)     {next_line lexbuf; token lexbuf}

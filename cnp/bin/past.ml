@@ -50,8 +50,15 @@ type quant =
   | NForAll
   | NExists
 
+type constraints =
+  | Distinct
+  | Equivalent
+
 type group = 
   | Grid
+  | Row
+  | Column
+  | Regions
   | Universe
   | Instance of expr
 
@@ -71,4 +78,5 @@ and expr =
   | Group of loc * group
   | Range of loc * expr * expr
   | Member of loc * expr * expr
+  | Sugar of loc * data_type * group * constraints
 

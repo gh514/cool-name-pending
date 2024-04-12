@@ -45,11 +45,13 @@ type token =
   | NFORALL
   | NEXISTS
   | IN
-  | CELLS
+  | ARE
   | SIZE
   | LENGTH
   | SUM
   | ADJACENT
+  | DISTINCT
+  | EQUIVALENT
   | EOF
 
 val main :

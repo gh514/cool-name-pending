@@ -15,9 +15,9 @@ let location = Parsing.symbol_start_pos;;
 %token EQUAL LT GT LTE GTE UNEQUAL MEMBER
 %token LEFTIMP RIGHTIMP BIIMP
 %token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON POINT TO COMMA
-%token FORALL EXISTS NFORALL NEXISTS IN
-%token CELLS SIZE LENGTH SUM
-%token ADJACENT
+%token FORALL EXISTS NFORALL NEXISTS IN ARE
+%token SIZE LENGTH SUM
+%token ADJACENT DISTINCT EQUIVALENT
 %token EOF
 
 %left ADJACENT
@@ -66,13 +66,16 @@ group:
     | GRID                                  {Past.Grid}
     | LSBRACK list RSBRACK                  {Past.Instance(Past.List(location(), $2))}
     | VAR                                   {Past.Instance(Past.Var(location(), $1))}
+    | ROW                                   {Past.Row}
+    | COLUMN                                {Past.Column}
+    | REGION                                {Past.Regions}
 
 list:
     | simple_expr                           {[$1]}
     | simple_expr COMMA list                {$1::$3}    
 
 utils:
-    | POINT CELLS                           {Past.Cells}
+    | POINT CELL                            {Past.Cells}
     | POINT SIZE                            {Past.Size}
     | POINT LENGTH                          {Past.Length}
     | POINT REGION                          {Past.Reg}
@@ -83,6 +86,10 @@ quantifier:
     | EXISTS                                {Past.Exists}
     | NFORALL                               {Past.NForAll}
     | NEXISTS                               {Past.NExists}
+
+constraints:
+    | DISTINCT                              {Past.Distinct}
+    | EQUIVALENT                            {Past.Equivalent}
 
 expr:
     | simple_expr utils                     {Past.Utils(location(), $1, $2)}
@@ -109,11 +116,12 @@ expr:
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
     | expr ADJACENT expr                    {Past.RegionOp(location(), $1, Past.Adjacent, $3)}
-    | quantifier dec IN group POINT LBRACK expr RBRACK
+    | quantifier dec MEMBER group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), $1, $2, $4, $7)}
     | quantifier dec POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), $1, $2, Past.Grid, $5)}
     | list MEMBER expr                      {Past.Member(location(), Past.List(location(), $1), $3)}
+    | datatype MEMBER group ARE constraints {Past.Sugar(location(), $1, $3, $5)}
 
 init:
     | GRID INT CROSS INT                    {(location(), $2, $4)}
