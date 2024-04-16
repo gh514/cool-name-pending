@@ -1,15 +1,4 @@
 
-(*
-let formula = Ast.Seq([Ast.Grid(2, 2); Ast.Op(Ast.Boolean(true), Ast.LeftImp, Ast.UnaryOp(Ast.Not, Ast.Var("x")))])
-let pformula = Past.Seq(0, [Past.Grid(0, 2, 2); 
-  Past.Op(0, Past.Integer(0, 3), Past.Equal, Past.RC(0, Past.Integer(0, 1), Past.Integer(0, 1)));
-  Past.Op(0, Past.Boolean(0, true), Past.BiImp, Past.UnaryOp(0, Past.Not, Past.Var(0, "x")))])
-
-
-let formula = [Ast.GridDec(2, 2); Ast.Group(Ast.Var("r"), 
-  [Ast.Var("r1c1_in_r"); Ast.Var("r1c2_in_r"); Ast.Var("r2c1_in_r"); Ast.Var("r2c2_in_r")])]
-*)
-
 exception Err of string
 
 let out = Printf.printf
@@ -61,7 +50,6 @@ let rec translate_dec dt e =
   | Ast.Region -> match e with
     | Ast.Bundle(field) -> translate_group field
 
-
 and translate_list = function
   | e::es -> nl (); indent !depth; translate_expr e; translate_list es
   | [] -> ()
@@ -107,16 +95,3 @@ let translate p =
         | [] -> ()
       in loop xs; out "\n\n(check-sat)\n(get-model)\n"
     | _ -> out "Puzzle must begin with grid declaration"; nl ();
-
-(*
-let _ = 
-  translate formula
-
-  let (e, _) = Past_to_ast.convert pformula []
-    in translate e
-*)
-
-
-  
-
-    

@@ -1,0 +1,15 @@
+Grid 9X9;
+
+Box box1 = [R1C1 To R3C3];
+Box box2 = [R1C4 To R3C6];
+Box box3 = [R1C7 To R3C9];
+Box box4 = [R4C1 To R6C3];
+Box box5 = [R4C4 To R6C6];
+Box box6 = [R4C7 To R6C9];
+Box box7 = [R7C1 To R9C3];
+Box box8 = [R7C4 To R9C6];
+Box box9 = [R7C7 To R9C9];
+  
+Cells In Rows Are Distinct;
+Cells In Columns Are Distinct;
+Cells In Boxes Are Distinct;

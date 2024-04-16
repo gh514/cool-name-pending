@@ -1,0 +1,9 @@
+Grid 9X9;
+
+Forall Cells c.(
+    c = c.Region.Size
+);
+
+Forall Regions r1, r2.(
+    r1 Adj r2 -> r1.Size != r2.Size
+)

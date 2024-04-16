@@ -36,10 +36,13 @@ rule token = parse
     | ("Rows")      {ROW}
     | ("Column")    {COLUMN}
     | ("Columns")   {COLUMN}
+    | ("Box")       {BOX}
+    | ("Boxes")     {BOX}
     | ('+')         {ADD}
     | ('-')         {SUB}
     | ('*')         {MUL}
     | ('/')         {DIV}
+    | ("Abs")       {ABS}
     | ("True")      {TRUE}
     | ("False")     {FALSE}
     | ("and")       {AND}

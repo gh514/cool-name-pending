@@ -14,10 +14,12 @@ type token =
   | BOOLDEC
   | ROW
   | COLUMN
+  | BOX
   | ADD
   | SUB
   | MUL
   | DIV
+  | ABS
   | AND
   | OR
   | NOT
@@ -29,6 +31,7 @@ type token =
   | GTE
   | UNEQUAL
   | MEMBER
+  | ADJACENT
   | LEFTIMP
   | RIGHTIMP
   | BIIMP
@@ -49,7 +52,6 @@ type token =
   | SIZE
   | LENGTH
   | SUM
-  | ADJACENT
   | DISTINCT
   | EQUIVALENT
   | EOF

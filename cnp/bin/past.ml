@@ -28,10 +28,12 @@ type data_type =
   | Cell
   | Region
   | Line
+  | Box
 
 type unary_op = 
   | Neg
   | Not
+  | Abs
 
 type region_op =
   | Adjacent
@@ -59,6 +61,7 @@ type group =
   | Row
   | Column
   | Regions
+  | Boxes
   | Universe
   | Instance of expr
 
@@ -71,12 +74,12 @@ and expr =
   | UnaryOp of loc * unary_op * expr
   | RegionOp of loc * expr * region_op * expr
   | Dec of loc * data_type * expr * (expr option)
-  | Assign of loc * expr * group
+  | Assign of loc * expr * expr
   | Utils of loc * expr * utilities
   | Quantifier of loc * quant * expr * group * expr
   | List of loc * (expr list)
   | Group of loc * group
   | Range of loc * expr * expr
   | Member of loc * expr * expr
-  | Sugar of loc * data_type * group * constraints
+  | Sugar of loc * data_type * expr * constraints
 

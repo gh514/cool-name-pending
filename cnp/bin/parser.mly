@@ -9,29 +9,28 @@ let location = Parsing.symbol_start_pos;;
 %token <int> INT
 %token <string> VAR
 %token TRUE FALSE
-%token GRID CROSS CELL REGION LINE R C INTDEC BOOLDEC ROW COLUMN
-%token ADD SUB MUL DIV
+%token GRID CROSS CELL REGION LINE R C INTDEC BOOLDEC ROW COLUMN BOX
+%token ADD SUB MUL DIV ABS
 %token AND OR NOT XOR
-%token EQUAL LT GT LTE GTE UNEQUAL MEMBER
+%token EQUAL LT GT LTE GTE UNEQUAL MEMBER ADJACENT
 %token LEFTIMP RIGHTIMP BIIMP
 %token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON POINT TO COMMA
 %token FORALL EXISTS NFORALL NEXISTS IN ARE
 %token SIZE LENGTH SUM
-%token ADJACENT DISTINCT EQUIVALENT
+%token DISTINCT EQUIVALENT
 %token EOF
 
-%left ADJACENT
 %left BIIMP
 %left LEFTIMP RIGHTIMP
-%left LT GT LTE GTE UNEQUAL NOT
+%left LT GT LTE GTE UNEQUAL EQUAL NOT
 %left MUL DIV OR XOR COMMA
-%left ADD SUB AND MEMBER
+%left ADD SUB AND MEMBER ADJACENT
 
 %right TO
 
-%nonassoc POINT
 %nonassoc INTDEC BOOLDEC CELL REGION LINE CROSS
-%nonassoc LBRACK RBRACK LSBRACK RSBRACK EQUAL GRID VAR R C
+%nonassoc LBRACK RBRACK LSBRACK RSBRACK GRID VAR R C
+%nonassoc POINT
 
 %start main
 %type <((Lexing.position * int * int) * Past.expr list)> main
@@ -57,6 +56,7 @@ datatype:
     | CELL                                  {Past.Cell}
     | REGION                                {Past.Region}
     | LINE                                  {Past.Line}
+    | BOX                                   {Past.Box}
 
 dec:
     | datatype list EQUAL simple_expr       {Past.Dec(location(), $1, Past.List(location(), $2), Some($4))}
@@ -68,6 +68,7 @@ group:
     | VAR                                   {Past.Instance(Past.Var(location(), $1))}
     | ROW                                   {Past.Row}
     | COLUMN                                {Past.Column}
+    | BOX                                   {Past.Boxes}
     | REGION                                {Past.Regions}
 
 list:
@@ -92,7 +93,7 @@ constraints:
     | EQUIVALENT                            {Past.Equivalent}
 
 expr:
-    | simple_expr utils                     {Past.Utils(location(), $1, $2)}
+    | expr utils                            {Past.Utils(location(), $1, $2)}
     | simple_expr                           {$1}
     | LBRACK expr RBRACK                    {$2}
     | dec                                   {$1}
@@ -100,12 +101,13 @@ expr:
     | expr SUB expr                         {Past.Op(location(), $1, Past.Sub, $3)}
     | expr MUL expr                         {Past.Op(location(), $1, Past.Mul, $3)}
     | expr DIV expr                         {Past.Op(location(), $1, Past.Div, $3)}
+    | ABS expr                              {Past.UnaryOp(location(), Past.Abs, $2)}
     | SUB expr                              {Past.UnaryOp(location(), Past.Neg, $2)}
     | expr AND expr                         {Past.Op(location(), $1, Past.And, $3)}
     | expr OR expr                          {Past.Op(location(), $1, Past.Or, $3)}
     | expr XOR expr                         {Past.Op(location(), $1, Past.Xor, $3)}
     | NOT expr                              {Past.UnaryOp(location(), Past.Not, $2)}
-    | expr EQUAL group                      {Past.Assign(location(), $1, $3)}
+    | expr EQUAL group                      {Past.Assign(location(), $1, Past.Group(location(), $3))}
     | expr EQUAL expr                       {Past.Op(location(), $1, Past.Equal, $3)}
     | expr LT expr                          {Past.Op(location(), $1, Past.LT, $3)}
     | expr GT expr                          {Past.Op(location(), $1, Past.GT, $3)}
@@ -121,7 +123,7 @@ expr:
     | quantifier dec POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), $1, $2, Past.Grid, $5)}
     | list MEMBER expr                      {Past.Member(location(), Past.List(location(), $1), $3)}
-    | datatype MEMBER group ARE constraints {Past.Sugar(location(), $1, $3, $5)}
+    | datatype MEMBER group ARE constraints {Past.Sugar(location(), $1, Past.Group(location(), $3), $5)}
 
 init:
     | GRID INT CROSS INT                    {(location(), $2, $4)}

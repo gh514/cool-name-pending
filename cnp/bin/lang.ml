@@ -1,32 +1,31 @@
 
+include Core
 
 let file = "test.cnp"
 
-let init_lexbuf file =  
-  let lexbuf = Lexing.from_channel (open_in file)
+let init_lexbuf file = 
+  let program = In_channel.read_all (Printf.sprintf "./%s" file)
+  
+
+  in let lexbuf = Lexing.from_string (Str.replace_first (Str.regexp "Normal Sudoku Rules Apply") 
+    "Box box1 = [R1C1 To R3C3];
+    Box box2 = [R1C4 To R3C6];
+    Box box3 = [R1C7 To R3C9];
+    Box box4 = [R4C1 To R6C3];
+    Box box5 = [R4C4 To R6C6];
+    Box box6 = [R4C7 To R6C9];
+    Box box7 = [R7C1 To R9C3];
+    Box box8 = [R7C4 To R9C6];
+    Box box9 = [R7C7 To R9C9];
+  
+    Cells In Rows Are Distinct;
+    Cells In Columns Are Distinct;
+    Cells In Boxes Are Distinct"
+    program)
   in let _ = lexbuf.lex_curr_p <- { pos_fname = file; pos_lnum = 1; pos_bol = 0; pos_cnum = 0; }
   in lexbuf
-    
-  (*
-let p = [Past.GridDec(0, 3, 3); Past.Quantifier(0, Past.ForAll,
-  Past.Dec(0, Past.Cell, Past.Var(0, "c")), Past.Grid, Past.Var(0, "c"))]
-
-
-let p = [Past.GridDec(0, 3, 3); Past.Op(0, Past.Var(0, "x"), Past.Add, Past.Integer(0, 4))]
-*)
 
 let _ = 
   let past_puzzle = Parser.main Lexer.token (init_lexbuf file) in
     let ast_puzzle = Past_to_ast.convert past_puzzle in
       Ast_to_smt_lib.translate ast_puzzle;
-
-(*
-let pformula = Past.Seq(0, [Past.GridDec(0, 2, 2); 
-  Past.Op(0, Past.Integer(0, 3), Past.Equal, Past.RC(0, Past.Integer(0, 1), Past.Integer(0, 1)));
-  Past.Op(0, Past.Boolean(0, true), Past.BiImp, Past.UnaryOp(0, Past.Not, Past.Var(0, "x")))])
-
-let _ =
-  let (past_exp, _) = Past_to_ast.convert (Past_to_ast.substitute "y" "x" pformula) [] in
-    Ast_to_smt_lib.translate past_exp
-
-*)
