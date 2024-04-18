@@ -7,7 +7,8 @@ type token =
   | CROSS
   | CELL
   | REGION
-  | LINE
+  | CENTRELINE
+  | EDGELINE
   | R
   | C
   | INTDEC
@@ -20,6 +21,7 @@ type token =
   | MUL
   | DIV
   | ABS
+  | DIFF
   | AND
   | OR
   | NOT

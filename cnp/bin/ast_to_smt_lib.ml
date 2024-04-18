@@ -33,6 +33,7 @@ let translate_op = function
 let translate_uop = function
   | Ast.Neg -> out "(-"
   | Ast.Not -> out "(not"
+  | Ast.Abs -> out "(abs"
 
 let rec init_grid r c m =
   if c = 0 then 
@@ -40,15 +41,13 @@ let rec init_grid r c m =
     else init_grid (r-1) m m
   else let outputs = out "\n(declare-const r%ic%i Int)" r c; in 
     init_grid r (c-1) m; outputs
-
     
 let rec translate_dec dt e =
   match dt with
   | Ast.Int -> out "(declare-const"; translate_expr e; out " Int)"
   | Ast.Bool -> out "(declare-const"; translate_expr e; out " Bool)"
   | Ast.Cell -> raise (Err "Type Ast.Cell should not be possible")
-  | Ast.Region -> match e with
-    | Ast.Bundle(field) -> translate_group field
+  | Ast.Region -> raise (Err "Type Ast.Region should not be possible")
 
 and translate_list = function
   | e::es -> nl (); indent !depth; translate_expr e; translate_list es

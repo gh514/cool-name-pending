@@ -28,8 +28,10 @@ rule token = parse
     | ("Cells")     {CELL}
     | ("Region")    {REGION}
     | ("Regions")   {REGION}
-    | ("Line")      {LINE}
-    | ("Lines")     {LINE}
+    | ("Centreline")      {CENTRELINE}
+    | ("Centrelines")     {CENTRELINE}
+    | ("Edgeline")  {EDGELINE}
+    | ("Edgelines") {EDGELINE}
     | ("Int")       {INTDEC}
     | ("Bool")      {BOOLDEC}
     | ("Row")       {ROW}
@@ -79,6 +81,7 @@ rule token = parse
     | ("Are")       {ARE}
     | ("Distinct")  {DISTINCT}
     | ("Equal")     {EQUIVALENT}
+    | ("Diff")      {DIFF}
     | int_regex     {INT (int_of_string (Lexing.lexeme lexbuf))}
     | var_regex     {VAR (Lexing.lexeme lexbuf)}
     | (newline)     {next_line lexbuf; token lexbuf}

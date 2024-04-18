@@ -9,8 +9,8 @@ let location = Parsing.symbol_start_pos;;
 %token <int> INT
 %token <string> VAR
 %token TRUE FALSE
-%token GRID CROSS CELL REGION LINE R C INTDEC BOOLDEC ROW COLUMN BOX
-%token ADD SUB MUL DIV ABS
+%token GRID CROSS CELL REGION CENTRELINE EDGELINE R C INTDEC BOOLDEC ROW COLUMN BOX
+%token ADD SUB MUL DIV ABS DIFF
 %token AND OR NOT XOR
 %token EQUAL LT GT LTE GTE UNEQUAL MEMBER ADJACENT
 %token LEFTIMP RIGHTIMP BIIMP
@@ -24,11 +24,12 @@ let location = Parsing.symbol_start_pos;;
 %left LEFTIMP RIGHTIMP
 %left LT GT LTE GTE UNEQUAL EQUAL NOT
 %left MUL DIV OR XOR COMMA
+%left ABS DIFF
 %left ADD SUB AND MEMBER ADJACENT
 
 %right TO
 
-%nonassoc INTDEC BOOLDEC CELL REGION LINE CROSS
+%nonassoc INTDEC BOOLDEC CELL REGION CENTRELINE EDGELINE CROSS
 %nonassoc LBRACK RBRACK LSBRACK RSBRACK GRID VAR R C
 %nonassoc POINT
 
@@ -55,7 +56,8 @@ datatype:
     | BOOLDEC                               {Past.Bool}
     | CELL                                  {Past.Cell}
     | REGION                                {Past.Region}
-    | LINE                                  {Past.Line}
+    | CENTRELINE                            {Past.CentreLine}
+    | EDGELINE                              {Past.EdgeLine}
     | BOX                                   {Past.Box}
 
 dec:
@@ -103,6 +105,7 @@ expr:
     | expr DIV expr                         {Past.Op(location(), $1, Past.Div, $3)}
     | ABS expr                              {Past.UnaryOp(location(), Past.Abs, $2)}
     | SUB expr                              {Past.UnaryOp(location(), Past.Neg, $2)}
+    | DIFF expr expr                        {Past.UnaryOp(location(), Past.Abs, Past.Op(location(), $2, Past.Sub, $3))}
     | expr AND expr                         {Past.Op(location(), $1, Past.And, $3)}
     | expr OR expr                          {Past.Op(location(), $1, Past.Or, $3)}
     | expr XOR expr                         {Past.Op(location(), $1, Past.Xor, $3)}
@@ -117,12 +120,13 @@ expr:
     | expr LEFTIMP expr                     {Past.Op(location(), $1, Past.LeftImp, $3)}
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
-    | expr ADJACENT expr                    {Past.RegionOp(location(), $1, Past.Adjacent, $3)}
+    | simple_expr ADJACENT simple_expr MEMBER simple_expr        {Past.SpecOp(location(), $1, Past.Adjacent(Some $5), $3)}
+    | simple_expr ADJACENT simple_expr      {Past.SpecOp(location(), $1, Past.Adjacent(None), $3)}
     | quantifier dec MEMBER group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), $1, $2, $4, $7)}
     | quantifier dec POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), $1, $2, Past.Grid, $5)}
-    | list MEMBER expr                      {Past.Member(location(), Past.List(location(), $1), $3)}
+    | list MEMBER simple_expr               {Past.Member(location(), Past.List(location(), $1), $3)}
     | datatype MEMBER group ARE constraints {Past.Sugar(location(), $1, Past.Group(location(), $3), $5)}
 
 init:

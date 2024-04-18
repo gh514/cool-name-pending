@@ -28,6 +28,7 @@ type data_type =
 type unary_op = 
   | Neg
   | Not
+  | Abs
 
 type quant =
   | ForAll

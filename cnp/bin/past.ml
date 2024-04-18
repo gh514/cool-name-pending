@@ -27,16 +27,14 @@ type data_type =
   | Bool
   | Cell
   | Region
-  | Line
+  | CentreLine
+  | EdgeLine
   | Box
 
 type unary_op = 
   | Neg
   | Not
   | Abs
-
-type region_op =
-  | Adjacent
 
 type utilities =
   | Cells
@@ -56,7 +54,13 @@ type constraints =
   | Distinct
   | Equivalent
 
-type group = 
+type spec_op =
+  | Adjacent of expr option
+  | CellAdjacent
+  | RegionAdjacent
+  | LineAdjacent of expr
+
+and group = 
   | Grid
   | Row
   | Column
@@ -72,7 +76,7 @@ and expr =
   | Var of loc * var
   | Op of loc * expr * op * expr
   | UnaryOp of loc * unary_op * expr
-  | RegionOp of loc * expr * region_op * expr
+  | SpecOp of loc * expr * spec_op * expr
   | Dec of loc * data_type * expr * (expr option)
   | Assign of loc * expr * expr
   | Utils of loc * expr * utilities
