@@ -45,6 +45,7 @@ type token =
   | POINT
   | TO
   | COMMA
+  | HALF
   | FORALL
   | EXISTS
   | NFORALL

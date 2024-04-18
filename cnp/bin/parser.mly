@@ -14,7 +14,7 @@ let location = Parsing.symbol_start_pos;;
 %token AND OR NOT XOR
 %token EQUAL LT GT LTE GTE UNEQUAL MEMBER ADJACENT
 %token LEFTIMP RIGHTIMP BIIMP
-%token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON POINT TO COMMA
+%token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON POINT TO COMMA HALF
 %token FORALL EXISTS NFORALL NEXISTS IN ARE
 %token SIZE LENGTH SUM
 %token DISTINCT EQUIVALENT
@@ -50,6 +50,7 @@ simple_expr:
     | R simple_expr C simple_expr           {Past.RC(location(), $2, $4)}
     | simple_expr TO simple_expr            {Past.Range(location(), $1, $3)}
     | group                                 {Past.Group(location(), $1)}
+    | simple_expr HALF                      {Past.Corner(location(), $1)}
 
 datatype:   
     | INTDEC                                {Past.Int}

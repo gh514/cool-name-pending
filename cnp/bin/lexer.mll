@@ -82,6 +82,7 @@ rule token = parse
     | ("Distinct")  {DISTINCT}
     | ("Equal")     {EQUIVALENT}
     | ("Diff")      {DIFF}
+    | (".5")        {HALF}
     | int_regex     {INT (int_of_string (Lexing.lexeme lexbuf))}
     | var_regex     {VAR (Lexing.lexeme lexbuf)}
     | (newline)     {next_line lexbuf; token lexbuf}

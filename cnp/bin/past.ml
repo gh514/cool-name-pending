@@ -59,6 +59,7 @@ type spec_op =
   | CellAdjacent
   | RegionAdjacent
   | LineAdjacent of expr
+  | CellLineAdjacent
 
 and group = 
   | Grid
@@ -73,6 +74,7 @@ and expr =
   | Integer of loc * int
   | Boolean of loc * bool
   | RC of loc * expr * expr
+  | Corner of loc * expr
   | Var of loc * var
   | Op of loc * expr * op * expr
   | UnaryOp of loc * unary_op * expr
