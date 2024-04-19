@@ -121,8 +121,12 @@ expr:
     | expr LEFTIMP expr                     {Past.Op(location(), $1, Past.LeftImp, $3)}
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
-    | simple_expr ADJACENT simple_expr MEMBER simple_expr        {Past.SpecOp(location(), $1, Past.Adjacent(Some $5), $3)}
+    | simple_expr ADJACENT simple_expr MEMBER simple_expr        
+                                            {Past.SpecOp(location(), $1, Past.Adjacent(Some $5), $3)}
     | simple_expr ADJACENT simple_expr      {Past.SpecOp(location(), $1, Past.Adjacent(None), $3)}
+    | expr ADJACENT CROSS INT expr
+                                            {Past.SpecOp(location(), $1, Past.CellLineAdjacent($4), $5)}
+    
     | quantifier dec MEMBER group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), $1, $2, $4, $7)}
     | quantifier dec POINT LBRACK expr RBRACK

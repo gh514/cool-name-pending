@@ -59,7 +59,7 @@ type spec_op =
   | CellAdjacent
   | RegionAdjacent
   | LineAdjacent of expr
-  | CellLineAdjacent
+  | CellLineAdjacent of int
 
 and group = 
   | Grid

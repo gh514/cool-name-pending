@@ -367,8 +367,8 @@ let rec replace_spec_op expr vars =
       | Past.Cell, Past.Adjacent(None), Past.Cell -> Past.SpecOp(l, e1, Past.CellAdjacent, e2)
       | Past.Region, Past.Adjacent(None), Past.Region -> Past.SpecOp(l, e1, Past.RegionAdjacent, e2)
       | Past.Cell, Past.Adjacent(Some ls), Past.Cell -> Past.SpecOp(l, e1, Past.LineAdjacent(ls), e2)
-      | Past.EdgeLine, Past.Adjacent(None), Past.Cell -> Past.SpecOp(l, e1, Past.CellLineAdjacent, e2)
-      | Past.Cell, Past.Adjacent(None), Past.EdgeLine -> Past.SpecOp(l, e1, Past.CellLineAdjacent, e2)
+      | Past.EdgeLine, Past.Adjacent(None), Past.Cell -> Past.SpecOp(l, e1, Past.CellLineAdjacent(-1), e2)
+      | Past.Cell, Past.Adjacent(None), Past.EdgeLine -> Past.SpecOp(l, e1, Past.CellLineAdjacent(-1), e2)
       | _ -> expr)
     | Past.Dec(l, dt, v, e) -> (match e with
       | Some e1 -> Past.Dec(l, dt, v, Some (replace_spec_op e1 vars))
@@ -407,13 +407,22 @@ and translate_spec_term l e1 sop e2 vars =
   let (Ast.Var(v2), vars2) = translate_expr e2 vars1 in
   let rc1 = Ast.Var(sprintf "%sTo%s" v1 v2) in
   let rc2 = Ast.Var(sprintf "%sTo%s" v2 v1) in
-  let Past.RC(_, Past.Integer(_, r1), Past.Integer(_, c1)) = e1 in 
-  let Past.RC(_, Past.Integer(_, r2), Past.Integer(_, c2)) = e2 in
+
   match sop1 with
-    | Past.RegionAdjacent -> ((if (abs (r1-r2) + abs (c1-c2)) = 1 then 
+
+    | Past.RegionAdjacent -> let Past.RC(_, Past.Integer(_, r1), Past.Integer(_, c1)) = e1 in 
+      let Past.RC(_, Past.Integer(_, r2), Past.Integer(_, c2)) = e2 in
+      ((if (abs (r1-r2) + abs (c1-c2)) = 1 then 
       Ast.Op(Ast.Var(sprintf "%s_root" v1), Ast.Unequal, Ast.Var(sprintf "%s_root" v2)) else Ast.Dead), vars2)
-    | Past.CellAdjacent -> ((if (abs (r1-r2+c1-c2)) <= 1 then Ast.Boolean(true) else Ast.Boolean(false)), vars2)
-    | Past.LineAdjacent(v) -> ((if abs (r1-r2) <= 1 && abs (c1-c2) <= 1 then
+
+    | Past.CellAdjacent -> let Past.RC(_, Past.Integer(_, r1), Past.Integer(_, c1)) = e1 in 
+      let Past.RC(_, Past.Integer(_, r2), Past.Integer(_, c2)) = e2 in
+      ((if (abs (r1-r2+c1-c2)) <= 1 then Ast.Boolean(true) else Ast.Boolean(false)), vars2)
+
+    | Past.LineAdjacent(v) -> 
+      let Past.RC(_, Past.Integer(_, r1), Past.Integer(_, c1)) = e1 in 
+      let Past.RC(_, Past.Integer(_, r2), Past.Integer(_, c2)) = e2 in
+      ((if abs (r1-r2) <= 1 && abs (c1-c2) <= 1 then
       (let (_, Some (Past.List(_, ls))) = find v vars in
       let rec loop = function
         | Past.Range(_, Past.RC(_, Past.Integer(_, ra1), Past.Integer(_, ca1)), 
@@ -422,7 +431,24 @@ and translate_spec_term l e1 sop e2 vars =
           then Ast.Boolean(true) else loop es
         | [] -> Ast.Boolean(false)
       in loop ls) else Ast.Dead), vars2)
-    | Past.CellLineAdjacent -> 
+
+    | Past.CellLineAdjacent(n) -> 
+      let constr r c v = List.map (fun ((r1, c1), (r2, c2)) -> Ast.Var(sprintf "%s_r%i.5c%i.5-r%i.5c%i.5" v r1 c1 r2 c2)) 
+        [((r, c), (r-1, c)); ((r, c), (r, c-1)); ((r-1, c), (r-1, c-1)); ((r, c-1), (r-1, c-1))]
+      in let num_constr r c v n = 
+        (if n = -1 then Ast.MultiOp(Ast.Or, constr r c v)
+        else Ast.Op(Ast.MultiOp(Ast.Add, List.map (fun var -> Ast.ITE(var, Ast.Integer(1), Ast.Integer(0))) (constr r c v))
+          , Ast.Equal, Ast.Integer(n)))
+      in ((match e1, e2 with
+        | Past.Var(_, v), Past.RC(_, Past.Integer(_, r), Past.Integer(_, c)) -> num_constr r c v n
+        | Past.RC(_, Past.Integer(_, r), Past.Integer(_, c)), Past.Var(_, v) -> num_constr r c v n)
+
+
+        
+        , vars2)
+
+      
+
     | Past.Adjacent(_) -> raise (Err "Adj operation not substituted")
 
 and translate_dec d v e vars = 
