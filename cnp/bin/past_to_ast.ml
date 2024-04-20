@@ -84,7 +84,7 @@ let rec substitute var_new var_old expr =
 
 let make_var_pair r1 c1 r2 c2 = Ast.Var(sprintf "r%ic%iTor%ic%i" r1 c1 r2 c2)
 
-let cells () =
+let get_cells () =
   let m = !gridr in
   let n = !gridc in
   let rec loop r c =
@@ -116,11 +116,11 @@ let columns () =
     | c -> (loop1 c m) :: (loop2 (c-1))
   in loop2 m
 
-let cell_grid l = List.map (fun (r, c) -> Past.RC(l, Past.Integer(l, r), Past.Integer(l, c))) (cells ())
+let cell_grid l = List.map (fun (r, c) -> Past.RC(l, Past.Integer(l, r), Past.Integer(l, c))) (get_cells ())
 
-let bool_grid reg = List.map (fun (r, c) -> Ast.Var(sprintf "r%ic%i_in_%s" r c reg)) (cells ())
+let bool_grid reg = List.map (fun (r, c) -> Ast.Var(sprintf "r%ic%i_in_%s" r c reg)) (get_cells ())
 
-let int_grid str = List.map (fun (r, c) -> Ast.Var(sprintf "r%ic%i_%s" r c str)) (cells ())
+let int_grid str = List.map (fun (r, c) -> Ast.Var(sprintf "r%ic%i_%s" r c str)) (get_cells ())
 
 let rec unpair = function
   | (a, b)::ls -> a::b::(unpair ls)
@@ -151,28 +151,66 @@ let create_vars adj_f =
       | _, _ -> (adj_f r c) @ (grid_pairs r (c-2) offset)
   in grid_pairs m n 1
 
+let cell_pred rc1 rc2 =
+  let (r1, c1), (r2, c2) = rc1, rc2
+  in r1 < r2 || (r1 = r2 && (c1 < c2))
+
+let cell_order rc1 rc2 =
+  if cell_pred rc1 rc2 then (rc2, rc1) else (rc1, rc2)
+
+let pair_line_segments l = 
+  List.concat_map (fun rc1 -> List.map (fun rc2 -> (rc1, rc2)) (List.filter (fun rc3 -> cell_pred rc3 rc1) l)) l
+
 let create_linevars x =
-  let m = !gridr in
-  let n = !gridc in
-  let rec grid_pairs r c =
-    if r = x-1 then []
-    else if c = x-1 then grid_pairs (r-1) n
-    else (adj_diag x r c) @ (grid_pairs r (c-1))
-  in grid_pairs m n
+  let all = get_cells ()
+  in (List.concat_map (fun (r, c) -> (adj_diag (x+1) r c)) all, pair_line_segments all)
 
 let get_vars pairs = List.map (fun ((r1, c1), (r2, c2)) -> 
   (make_var_pair r1 c1 r2 c2, make_var_pair r2 c2 r1 c1)) pairs
 
+let surrounding x (r, c) =
+  let m = !gridr in
+  let n = !gridc in
+  (List.filter (fun (r, c) -> r >= x && r <= m && c >= x && c <= n) 
+    [(r+1, c+1); (r+1, c); (r+1, c-1);
+     (r, c+1); (r, c-1);
+     (r-1, c+1); (r-1, c); (r-1, c-1)])
+
 let create_centreline l = 
-  let Ast.Var(nl) = l in 
-  (List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" nl r c))) (cells ()))
-    @ (List.map (fun ((r1, c1), (r2, c2)) ->
-    Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i-r%ic%i" nl r1 c1 r2 c2))) (create_linevars 1))
+  let Ast.Var(nl) = l
+  in let (adj_lines, linevars) = create_linevars 0
+  in let line_segments = List.concat_map (fun (rc1, rc2) -> [(rc1, rc2); (rc2, rc1)]) adj_lines
+  in let to_var (r1, c1) (r2, c2) = Ast.Var(sprintf "%s_r%ic%iTor%ic%i" nl r1 c1 r2 c2)
+  in let to_cell (r, c) s = Ast.Var(sprintf "%s_r%ic%i%s" nl r c s)
+  in let cells = get_cells ()
+  in let cell_pairs = List.concat_map (fun rc1 -> List.map (fun rc2 -> (rc1, rc2)) (List.filter (fun rc2 -> rc2 <> rc1) cells)) cells
+  in (List.map (fun rc -> Ast.Dec(Ast.Bool, to_cell rc "")) cells)
+    @ (List.map (fun (rc1, rc2) -> Ast.Dec(Ast.Bool, to_var rc1 rc2)) line_segments)
+    @ (List.map (fun rc -> Ast.Dec(Ast.Bool, to_cell rc "_source")) cells)
+    @ (List.map (fun rc -> Ast.Dec(Ast.Bool, to_cell rc "_sink")) cells)
+    @ (List.map (fun rc -> Ast.Dec(Ast.Int, to_cell rc "_count")) cells)
+    @ (List.map (fun ((r1, c1), (r2, c2)) -> Ast.Op(to_var (r1, c1) (r2, c2), Ast.LeftImp,
+      Ast.Op(Ast.Var(sprintf "%s_r%ic%i" nl r1 c1), Ast.And, Ast.Var(sprintf "%s_r%ic%i" nl r2 c2)))) line_segments)
+    @ (List.map (fun (rc1, rc2) -> Ast.Op(to_var rc1 rc2, Ast.LeftImp, Ast.UnaryOp(Ast.Not, to_var rc2 rc1))) line_segments)
+    @ (List.map (fun (rc1, rc2) -> Ast.Op(Ast.Op(to_cell rc1 "", Ast.And, to_cell rc2 ""), Ast.LeftImp, Ast.MultiOp(Ast.Or, 
+      List.map (fun rc -> Ast.Op(to_var rc1 rc, Ast.And, to_cell rc "")) (surrounding 1 rc1)))) linevars)
+    @ [Ast.Op(Ast.MultiOp(Ast.Add, List.map (fun rc -> Ast.ITE(to_cell rc "_source", Ast.Integer(1), Ast.Integer(0))) cells), Ast.Equal, Ast.Integer(1))]
+    @ [Ast.Op(Ast.MultiOp(Ast.Add, List.map (fun rc -> Ast.ITE(to_cell rc "_sink", Ast.Integer(1), Ast.Integer(0))) cells), Ast.Equal, Ast.Integer(1))]
+    @ List.map (fun rc1 -> Ast.Op(to_cell rc1 "_source", Ast.LeftImp, Ast.UnaryOp(Ast.Not, 
+      Ast.MultiOp(Ast.Or, List.map (fun rc2 -> to_var rc2 rc1) (surrounding 1 rc1))))) cells
+    @ List.map (fun rc1 -> Ast.Op(to_cell rc1 "_sink", Ast.LeftImp, Ast.UnaryOp(Ast.Not, 
+      Ast.MultiOp(Ast.Or, List.map (fun rc2 -> to_var rc1 rc2) (surrounding 1 rc1))))) cells
+    @ List.map (fun rc -> Ast.Op(to_cell rc "_source", Ast.LeftImp, (Ast.Op(to_cell rc "_count", Ast.Equal, Ast.Integer(0))))) cells
+    @ List.map (fun (rc1, rc2) -> Ast.Op(to_var rc1 rc2, Ast.LeftImp, Ast.Op(to_cell rc1 "_count", Ast.LT, to_cell rc2 "_count"))
+      
+    ) line_segments
+    
 
 let create_edgeline l =
   let Ast.Var(nl) = l in
-  (List.map (fun ((r1, c1), (r2, c2)) -> 
-    Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%i.5c%i.5-r%i.5c%i.5" nl r1 c1 r2 c2))) (create_linevars 0))
+  let (adj_lines, linevars) = create_linevars (-1)
+  in (List.map (fun ((r1, c1), (r2, c2)) -> 
+    Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%i.5c%i.5-r%i.5c%i.5" nl r1 c1 r2 c2))) linevars)
 
 let direction_constraints f = 
   let rec loop = function
@@ -286,17 +324,22 @@ let rec pair = function
 let translate_centreline l v =
   let past_lines = unpack_line l
   in let lines = List.map (List.map (fun (Past.RC(_, r, c)) -> (get_int r, get_int c))) past_lines
+  in let (adj_lines, _) = create_linevars 0
   in (List.map (fun (r, c) -> let t = Ast.Var(sprintf "%s_r%ic%i" v r c)
-    in if List.mem (r, c) (List.concat lines) then t else Ast.UnaryOp(Ast.Not, t)) (cells ())
-    @ List.map (fun ((r1, c1), (r2, c2)) -> (let t = Ast.Var(sprintf "%s_r%ic%i-r%ic%i" v r1 c1 r2 c2)
-    in if List.mem ((r1, c1), (r2, c2)) (List.concat_map pair lines) then t else Ast.UnaryOp(Ast.Not, t))) (create_vars (adj_diag 1)), 
+    in if List.mem (r, c) (List.concat lines) then t else Ast.UnaryOp(Ast.Not, t)) (get_cells ())
+    @ List.map (fun ((r1, c1), (r2, c2)) -> (let t = Ast.Var(sprintf "%s_r%ic%iTor%ic%i" v r1 c1 r2 c2)
+    in if List.mem ((r1, c1), (r2, c2)) (List.concat_map pair lines) then t else Ast.UnaryOp(Ast.Not, t))) adj_lines
+    
+    
+    , 
     Past.List(get_loc (List.hd l), List.map (fun (rc1, rc2) -> Past.Range(get_loc rc1, rc1, rc2)) (List.concat_map pair past_lines)))
 
 let translate_edgeline l v =
   let past_lines = unpack_line l
   in let lines = List.map (List.map (fun (Past.RC(_, Past.Corner(_, r), Past.Corner(_, c))) -> (get_int r, get_int c))) past_lines
-  in (List.map (fun ((r1, c1), (r2, c2)) -> (let t = Ast.Var(sprintf "%s_r%i.5c%i.5-r%i.5c%i.5" v r1 c1 r2 c2)
-    in if List.mem ((r1, c1), (r2, c2)) (List.concat_map pair lines) then t else Ast.UnaryOp(Ast.Not, t))) (create_linevars 0), 
+  in let (adj_lines, linevars) = create_linevars (-1)
+  in (List.map (fun ((r1, c1), (r2, c2)) -> (let t = Ast.Var(sprintf "%s_r%i.5c%i.5Tor%i.5c%i.5" v r1 c1 r2 c2)
+    in if List.mem ((r1, c1), (r2, c2)) (List.concat_map pair lines) then t else Ast.UnaryOp(Ast.Not, t))) adj_lines, 
     Past.List(get_loc (List.hd l), List.map (fun (rc1, rc2) -> Past.Range(get_loc rc1, rc1, rc2)) (List.concat_map pair past_lines)))
 
 let expand_range rc1 rc2 =
@@ -407,18 +450,14 @@ and translate_spec_term l e1 sop e2 vars =
   let (Ast.Var(v2), vars2) = translate_expr e2 vars1 in
   let rc1 = Ast.Var(sprintf "%sTo%s" v1 v2) in
   let rc2 = Ast.Var(sprintf "%sTo%s" v2 v1) in
-
   match sop1 with
-
     | Past.RegionAdjacent -> let Past.RC(_, Past.Integer(_, r1), Past.Integer(_, c1)) = e1 in 
       let Past.RC(_, Past.Integer(_, r2), Past.Integer(_, c2)) = e2 in
       ((if (abs (r1-r2) + abs (c1-c2)) = 1 then 
       Ast.Op(Ast.Var(sprintf "%s_root" v1), Ast.Unequal, Ast.Var(sprintf "%s_root" v2)) else Ast.Dead), vars2)
-
     | Past.CellAdjacent -> let Past.RC(_, Past.Integer(_, r1), Past.Integer(_, c1)) = e1 in 
       let Past.RC(_, Past.Integer(_, r2), Past.Integer(_, c2)) = e2 in
       ((if (abs (r1-r2+c1-c2)) <= 1 then Ast.Boolean(true) else Ast.Boolean(false)), vars2)
-
     | Past.LineAdjacent(v) -> 
       let Past.RC(_, Past.Integer(_, r1), Past.Integer(_, c1)) = e1 in 
       let Past.RC(_, Past.Integer(_, r2), Past.Integer(_, c2)) = e2 in
@@ -431,7 +470,6 @@ and translate_spec_term l e1 sop e2 vars =
           then Ast.Boolean(true) else loop es
         | [] -> Ast.Boolean(false)
       in loop ls) else Ast.Dead), vars2)
-
     | Past.CellLineAdjacent(n) -> 
       let constr r c v = List.map (fun ((r1, c1), (r2, c2)) -> Ast.Var(sprintf "%s_r%i.5c%i.5-r%i.5c%i.5" v r1 c1 r2 c2)) 
         [((r, c), (r-1, c)); ((r, c), (r, c-1)); ((r-1, c), (r-1, c-1)); ((r, c-1), (r-1, c-1))]
@@ -442,13 +480,7 @@ and translate_spec_term l e1 sop e2 vars =
       in ((match e1, e2 with
         | Past.Var(_, v), Past.RC(_, Past.Integer(_, r), Past.Integer(_, c)) -> num_constr r c v n
         | Past.RC(_, Past.Integer(_, r), Past.Integer(_, c)), Past.Var(_, v) -> num_constr r c v n)
-
-
-        
         , vars2)
-
-      
-
     | Past.Adjacent(_) -> raise (Err "Adj operation not substituted")
 
 and translate_dec d v e vars = 
@@ -564,7 +596,7 @@ and translate_sugar dt e c vars =
   in let Past.Group(_, g) = e 
   in match dt with
     | Past.Cell -> (match g with
-      | Past.Grid -> (Ast.MultiOp(con, to_var (cells ())), vars)
+      | Past.Grid -> (Ast.MultiOp(con, to_var (get_cells ())), vars)
       | Past.Row -> (Ast.MultiOp(Ast.And, List.map (fun l -> Ast.MultiOp(con, to_var l)) (rows ())), vars)
       | Past.Column -> (Ast.MultiOp(Ast.And, List.map (fun l -> Ast.MultiOp(con, to_var l)) (columns ())), vars)
       | Past.Boxes -> (Ast.MultiOp(Ast.And, (List.filter_map (fun (dt, v, Some e) ->
@@ -611,9 +643,9 @@ let init_named_regions vars =
     | [] -> []
   in let rec loop = function
     | (Past.Region, Past.Var(_, v), None)::es -> 
-      (List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" v r c))) (cells ()))@(loop es)
+      (List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" v r c))) (get_cells ()))@(loop es)
     | (Past.Region, Past.Var(_, v), Some (Past.List(_, l)))::es -> 
-      (List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" v r c))) (cells ()))
+      (List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" v r c))) (get_cells ()))
       @ (List.map (fun (r, c) -> Ast.Var(sprintf "%s_r%ic%i" v r c)) (unpack l))@(loop es)
     | _::es -> loop es
     | [] -> []
