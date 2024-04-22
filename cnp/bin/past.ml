@@ -29,6 +29,8 @@ type data_type =
   | Region
   | CentreLine
   | EdgeLine
+  | CentreLoop
+  | EdgeLoop
   | Box
 
 type unary_op = 

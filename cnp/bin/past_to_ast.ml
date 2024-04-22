@@ -175,7 +175,7 @@ let surrounding x (r, c) =
      (r, c+1); (r, c-1);
      (r-1, c+1); (r-1, c); (r-1, c-1)])
 
-let line_constraints l s x = 
+let line_constraints l s x line = 
   let Ast.Var(nl) = l
   in let (adj_lines, linevars) = create_linevars (x-1)
   in let line_segments = List.concat_map (fun (rc1, rc2) -> [(rc1, rc2); (rc2, rc1)]) adj_lines
@@ -187,10 +187,14 @@ let line_constraints l s x =
     @ List.map (fun (rc1, rc2) -> Ast.Dec(Ast.Bool, to_var rc1 rc2)) line_segments
     @ List.map (fun rc -> Ast.Dec(Ast.Bool, to_cell rc "_source")) cells
     @ List.map (fun rc -> Ast.Dec(Ast.Int, to_cell rc "_count")) cells
+    @ (if line then [] else List.map (fun rc -> Ast.Dec(Ast.Int, to_cell rc "_sink")) cells)
+    @ (if line then [] else [Ast.Op(Ast.MultiOp(Ast.Add, List.map (fun rc -> Ast.ITE(to_cell rc "_sink", Ast.Integer(1), Ast.Integer(0))) cells)
+      , Ast.Equal, Ast.Integer(1))])
     @ List.map (fun (rc1, rc2) -> Ast.Op(to_var rc1 rc2, Ast.LeftImp, Ast.Op(to_cell rc1 "", Ast.And, to_cell rc2 ""))) line_segments
     @ List.map (fun (rc1, rc2) -> Ast.Op(to_var rc1 rc2, Ast.LeftImp, Ast.UnaryOp(Ast.Not, to_var rc2 rc1))) line_segments
     @ List.map (fun (rc1, rc2) -> Ast.Op(Ast.Op(to_cell rc1 "", Ast.And, to_cell rc2 ""), Ast.LeftImp, Ast.MultiOp(Ast.Or, 
-      List.map (fun rc -> Ast.Op(to_var rc1 rc, Ast.And, to_cell rc "")) (surrounding x rc1)))) linevars
+      List.map (fun rc -> Ast.Op(to_var rc1 rc, Ast.And, to_cell rc "")) (surrounding x rc1)
+      @ List.map (fun rc -> Ast.Op(to_var rc2 rc, Ast.And, to_cell rc "")) (surrounding x rc2)))) linevars  (*many solutions vs forcing*)
     @ [Ast.Op(Ast.MultiOp(Ast.Add, List.map (fun rc -> Ast.ITE(to_cell rc "_source", Ast.Integer(1), Ast.Integer(0))) cells), Ast.Equal, Ast.Integer(1))]
     @ List.map (fun rc1 -> Ast.Op(to_cell rc1 "_source", Ast.LeftImp, Ast.UnaryOp(Ast.Not, 
       Ast.MultiOp(Ast.Or, List.map (fun rc2 -> to_var rc2 rc1) (surrounding x rc1))))) cells
@@ -200,13 +204,20 @@ let line_constraints l s x =
     , Ast.LTE, Ast.ITE(to_cell rc1 "_source", Ast.Integer(2), Ast.Integer(1)))) cells
     @ List.map (fun rc1 -> Ast.Op(to_cell rc1 "_source", Ast.LeftImp, Ast.UnaryOp(Ast.Not, Ast.MultiOp(Ast.Or, 
       List.map (fun rc2 -> to_var rc2 rc1) (surrounding x rc1))))) cells
-    @ List.map (fun rc1 -> Ast.Op(Ast.Op(Ast.MultiOp(Ast.Add, List.map (fun rc2 -> Ast.ITE(to_var rc2 rc1, Ast.Integer(1), Ast.Integer(0)))
-      (surrounding x rc1)), Ast.GTE, Ast.Integer(2)), Ast.LeftImp, Ast.MultiOp(Ast.And, List.map (fun rc2 -> 
-      Ast.UnaryOp(Ast.Not, to_var rc1 rc2)) (surrounding x rc1)))) cells
+    @ (if line then List.map (fun rc1 -> Ast.Op(Ast.MultiOp(Ast.Add,
+        List.map (fun rc2 -> Ast.ITE(to_var rc2 rc1, Ast.Integer(1), Ast.Integer(0))) (surrounding x rc1)), Ast.LTE, Ast.Integer(1)))
+      else List.map (fun rc1 -> Ast.Op(Ast.UnaryOp(Ast.Not, to_cell rc1 "_sink"), Ast.LeftImp, Ast.Op(Ast.MultiOp(Ast.Add, 
+        List.map (fun rc2 -> Ast.ITE(to_var rc2 rc1, Ast.Integer(1), Ast.Integer(0))) (surrounding x rc1)), Ast.LTE, Ast.Integer(1))))) cells
+    @ (if line then [] else List.map (fun rc1 -> Ast.Op(to_cell rc1 "_sink", Ast.LeftImp, Ast.Op(Ast.MultiOp(Ast.Add, 
+      List.map (fun rc2 -> Ast.ITE(to_var rc2 rc1, Ast.Integer(1), Ast.Integer(0))) (surrounding x rc1)), Ast.Equal, Ast.Integer(2)))) cells)
 
-let create_centreline l = line_constraints l "" 1
+let create_centreline l = line_constraints l "" 1 true
 
-let create_edgeline l = line_constraints l ".5" 0
+let create_edgeline l = line_constraints l ".5" 0 true
+
+let create_centreloop l = line_constraints l "" 1 false
+
+let create_edgeloop l = line_constraints l ".5" 0 false
 
 let direction_constraints f = 
   let rec loop = function
@@ -498,6 +509,10 @@ and translate_dec d v e vars =
       (match e with
         | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> define_edgeline l init v1 vars
         | None -> (Ast.Bundle(init), (Past.EdgeLine, v1, None)::vars))
+    | Past.CentreLoop -> let init = create_centreloop nv in
+      (match e with
+      | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> define_centreline l init v1 vars
+      | None -> (Ast.Bundle(init), (Past.CentreLine, v1, None)::vars))
     | Past.Box -> (match e with
       | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> define_box l v1 vars)
     | _ -> raise (Err "Unimplemented datatype")

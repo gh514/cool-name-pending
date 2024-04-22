@@ -9,6 +9,8 @@ type token =
   | REGION
   | CENTRELINE
   | EDGELINE
+  | CENTRELOOP
+  | EDGELOOP
   | R
   | C
   | INTDEC

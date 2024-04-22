@@ -9,7 +9,7 @@ let location = Parsing.symbol_start_pos;;
 %token <int> INT
 %token <string> VAR
 %token TRUE FALSE
-%token GRID CROSS CELL REGION CENTRELINE EDGELINE R C INTDEC BOOLDEC ROW COLUMN BOX
+%token GRID CROSS CELL REGION CENTRELINE EDGELINE CENTRELOOP EDGELOOP R C INTDEC BOOLDEC ROW COLUMN BOX
 %token ADD SUB MUL DIV ABS DIFF
 %token AND OR NOT XOR
 %token EQUAL LT GT LTE GTE UNEQUAL MEMBER ADJACENT
@@ -59,6 +59,8 @@ datatype:
     | REGION                                {Past.Region}
     | CENTRELINE                            {Past.CentreLine}
     | EDGELINE                              {Past.EdgeLine}
+    | CENTRELOOP                            {Past.CentreLoop}
+    | EDGELOOP                              {Past.EdgeLoop}
     | BOX                                   {Past.Box}
 
 dec:
