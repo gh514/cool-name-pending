@@ -13,7 +13,7 @@ let next_line lexbuf =
 
 }
 
-let var_regex = ['a'-'z'] ['a'-'z' 'A'-'Z' '0'-'9' '_' ''']*
+let var_regex = ['a'-'z'] ['a'-'z' '0'-'9' '_' ''']*
 let int_regex = ['0'-'9']+
 let newline = ('\n'|'\r'|"\n\r")
 let cell_regex = ['R'] int_regex ['C'] int_regex

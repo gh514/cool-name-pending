@@ -435,11 +435,82 @@ let rec replace_spec_op expr vars =
     | Past.Sugar(l, dt, e1, c) -> Past.Sugar(l, dt, replace_spec_op e1 vars, c)
     | _ -> expr
 
+let scan_rc expr vars =
+  let rec loop e =
+    match e with
+      | Past.RC(_, e1, e2) -> let f v = function
+          | None -> [v]
+          | Some _ -> []
+        in let m e = match e with
+          | Past.Var(_, v) -> let (_, e1) = find e vars in f v e1
+          | _ -> []
+        in m e1 @ m e2
+      | Past.Corner(_, e1) -> loop e1
+      | Past.Op(_, e1, _, e2) -> loop e1 @ loop e2
+      | Past.UnaryOp(_, _, e1) -> loop e1
+      | Past.SpecOp(_, e1, _, e2) -> loop e1 @ loop e2
+      | Past.Dec(_, _, e1, e2) -> loop e1 @ (match e2 with
+        | Some e3 -> loop e3
+        | None -> [])
+      | Past.Assign(_, e1, e2) -> loop e1 @ loop e2
+      | Past.Utils(_, e1, _) -> loop e1
+      | Past.Quantifier(_, _, e1, g, e2) -> loop e1 @ loop e2 @
+        (match g with
+          | Past.Instance(e3) -> loop e3
+          | _ -> [])
+      | Past.List(_, l) -> let f a b = a @ loop b in List.fold_left f [] l
+      | Past.Group(_, g) -> (match g with
+        | Instance(e) -> loop e
+        | _ -> [])
+      | Past.Range(_, e1, e2) -> loop e1 @ loop e2
+      | Past.Member(_, e1, e2) -> loop e2 @ loop e2
+      | Past.Sugar(_, _, e1, _) -> loop e1
+      | _ -> []
+  in loop expr
+
+let replace_rc x v expr = 
+  let rec loop e = 
+    match e with
+      | Past.RC(l, r, c) -> let f e1 = match e1 with
+          | Past.Var(_, v1) -> if v = v1 then Past.Integer(l, x) else e1
+          | Past.Integer(_, _) -> e1
+        in Past.RC(l, f r, f c)  
+      | Past.Corner(l, e) -> Past.Corner(l, loop e)
+      | Past.Op(l, e1, op, e2) -> Past.Op(l, loop e1, op, e2)
+      | Past.UnaryOp(l, uop, e1) -> Past.UnaryOp(l, uop, loop e1)
+      | Past.SpecOp(l, e1, sop, e2) -> Past.SpecOp(l, loop e1, sop, loop e2)
+      | Past.Dec(l, dt, e1, e2) -> (match e2 with
+        | Some e3 -> Past.Dec(l, dt, loop e1, Some (loop e3))
+        | None -> e)
+      | Past.Assign(l, e1, e2) -> Past.Assign(l, loop e1, loop e2)
+      | Past.Utils(l, e1, u) -> Past.Utils(l, loop e1, u)
+      | Past.Quantifier(l, q, e1, g, e2) -> let Past.Group(_, ng) = loop (Past.Group(l, g)) in Past.Quantifier(l, q, loop e1, ng, loop e2)
+      | Past.List(l, ls) -> Past.List(l, List.map (fun e1 -> loop e1) ls)
+      | Past.Group(l, g) -> (match g with
+        | Past.Instance(e1) -> Past.Group(l, Past.Instance(loop e1))
+        | _ -> e)
+      | Past.Range(l, e1, e2) -> Past.Range(l, loop e1, loop e2)
+      | Past.Member(l, e1, e2) -> Past.Member(l, loop e1, loop e2)
+      | Past.Sugar(l, dt, e1, c) -> Past.Sugar(l, dt, loop e1, c)
+  in loop expr
+      
 let rec store_vars dt vars = function
   | v::vs -> store_vars dt ((dt, v, None)::vars) vs
   | [] -> vars
 
-let rec translate_term e1 op e2 vars =
+
+let rec translate_rc r c vars = (Ast.Var("temp"), vars)
+
+(*
+let rec translate_rc r c vars =
+  let f x = match x with
+    | Past.Integer(_, i) -> i
+    | Past.Var(_, v) -> let (_, e) = find x vars in (match e with
+      | Some (Past.Integer(_, i)) -> i
+      | None -> Ast.MultiOp(Ast.Or, List.map (fun i -> Ast.Op(Ast.)) (init !gridr =)))
+  in 
+*)
+and translate_term e1 op e2 vars =
   let (expr1, vars1) = translate_expr e1 vars in
   let (expr2, vars2) = translate_expr e2 vars1 in
   (Ast.Op(expr1, translate_op op, expr2), vars2)
@@ -494,7 +565,9 @@ and translate_dec d v e vars =
   let helper v1 vars =
     let (nv, _) = translate_expr v1 vars in
     match d with
-    | Past.Int -> (Ast.Dec(Ast.Int, nv), (Past.Int, v1, None)::vars)
+    | Past.Int -> (match e with
+      | Some Past.Integer(_, i) -> (Ast.Dec(Ast.Int, nv), (Past.Int, v1, e)::vars)
+      | None -> (Ast.Dec(Ast.Int, nv), (Past.Int, v1, None)::vars))
     | Past.Cell -> (match e with 
       | None -> (Ast.Dead, (Past.Cell, v1, None)::vars))
     | Past.Region -> let init = if !regions then [] else (regions := true; init_regions ()) in
@@ -631,7 +704,7 @@ and translate_expr e vars =
   match e with
   | Past.Integer(_, n) -> (Ast.Integer(n), vars)
   | Past.Boolean(_, b) -> (Ast.Boolean(b), vars)
-  | Past.RC(_, r, c) -> (Ast.Var(sprintf "r%ic%i" (get_int r) (get_int c)), vars)
+  | Past.RC(_, r, c) -> translate_rc r c vars
   | Past.Var(_, v) -> (Ast.Var(v), vars)
   | Past.Op(_, e1, op, e2) -> 
     (match op with
@@ -686,7 +759,7 @@ let convert = function
   | ((_, r, c), xs) -> gridr := r; gridc := c;
     let rec loop exprs vars = 
       match exprs with
-      | e::es -> let (expr, nvars) = translate_expr e vars in
-        expr :: (loop es nvars)
+      | e::es -> List.map (fun v -> Ast.Bundle(List.map (fun x -> translate_expr (replace_rc x v e) vars) (List.init !gridr =))) (scan_rc e vars)
+        else let (expr, nvars) = translate_expr e vars in expr :: (loop es nvars)
       | [] -> [init_named_regions vars]
     in ((r, c), flatten (replace (loop xs [])))

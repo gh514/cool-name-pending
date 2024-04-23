@@ -30,8 +30,8 @@ let location = Parsing.symbol_start_pos;;
 %right TO
 
 %nonassoc INTDEC BOOLDEC CELL REGION CENTRELINE EDGELINE CROSS
-%nonassoc LBRACK RBRACK LSBRACK RSBRACK GRID VAR R C
-%nonassoc POINT
+%nonassoc LBRACK RBRACK LSBRACK RSBRACK GRID VAR
+%nonassoc POINT R C
 
 %start main
 %type <((Lexing.position * int * int) * Past.expr list)> main
