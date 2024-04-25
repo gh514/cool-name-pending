@@ -18,20 +18,24 @@ let location = Parsing.symbol_start_pos;;
 %token FORALL EXISTS NFORALL NEXISTS IN ARE
 %token SIZE LENGTH SUM
 %token DISTINCT EQUIVALENT
-%token EOF
+%token EOF HIGH LOW
+
+%nonassoc LOW
 
 %left BIIMP
 %left LEFTIMP RIGHTIMP
 %left LT GT LTE GTE UNEQUAL EQUAL NOT
-%left MUL DIV OR XOR COMMA
+%left MUL DIV OR XOR COMMA ROW
 %left ABS DIFF
 %left ADD SUB AND MEMBER ADJACENT
 
 %right TO
 
-%nonassoc INTDEC BOOLDEC CELL REGION CENTRELINE EDGELINE CROSS
+%nonassoc INTDEC BOOLDEC CELL REGION CENTRELINE EDGELINE CROSS INT
 %nonassoc LBRACK RBRACK LSBRACK RSBRACK GRID VAR
 %nonassoc POINT R C
+
+%nonassoc HIGH
 
 %start main
 %type <((Lexing.position * int * int) * Past.expr list)> main
@@ -71,10 +75,14 @@ group:
     | GRID                                  {Past.Grid}
     | LSBRACK list RSBRACK                  {Past.Instance(Past.List(location(), $2))}
     | VAR                                   {Past.Instance(Past.Var(location(), $1))}
-    | ROW                                   {Past.Row}
-    | COLUMN                                {Past.Column}
-    | BOX                                   {Past.Boxes}
+    | ROW %prec LOW                         {Past.Row(None)}
+    | ROW expr %prec HIGH                   {Past.Row(Some $2)}
+    | COLUMN %prec LOW                      {Past.Column(None)}
+    | COLUMN expr %prec HIGH                {Past.Column(Some $2)}
+    | BOX %prec LOW                         {Past.Boxes(None)}
+    | BOX expr %prec HIGH                   {Past.Boxes(Some $2)}
     | REGION                                {Past.Regions}
+    | LBRACK group RBRACK                   {$2}
 
 list:
     | simple_expr                           {[$1]}
@@ -113,8 +121,8 @@ expr:
     | expr OR expr                          {Past.Op(location(), $1, Past.Or, $3)}
     | expr XOR expr                         {Past.Op(location(), $1, Past.Xor, $3)}
     | NOT expr                              {Past.UnaryOp(location(), Past.Not, $2)}
-    | expr EQUAL group                      {Past.Assign(location(), $1, Past.Group(location(), $3))}
-    | expr EQUAL expr                       {Past.Op(location(), $1, Past.Equal, $3)}
+    | expr EQUAL group %prec HIGH           {Past.Assign(location(), $1, Past.Group(location(), $3))}
+    | expr EQUAL expr %prec LOW             {Past.Op(location(), $1, Past.Equal, $3)}
     | expr LT expr                          {Past.Op(location(), $1, Past.LT, $3)}
     | expr GT expr                          {Past.Op(location(), $1, Past.GT, $3)}
     | expr LTE expr                         {Past.Op(location(), $1, Past.LTE, $3)}

@@ -60,6 +60,8 @@ type token =
   | DISTINCT
   | EQUIVALENT
   | EOF
+  | HIGH
+  | LOW
 
 val main :
   (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> ((Lexing.position * int * int) * Past.expr list)

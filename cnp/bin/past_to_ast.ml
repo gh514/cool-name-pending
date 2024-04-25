@@ -55,7 +55,6 @@ let get_bool = function
 
 let get_var = function
   | Past.Var(_, v) -> v
-  | Past.RC(_, Past.Integer(_, r), Past.Integer(_, c)) -> sprintf "r%ic%i" r c
 
 let get_var_ast = function
   | Ast.Var(v) -> v
@@ -93,27 +92,29 @@ let get_cells x =
     else (r, c)::loop r (c-1)
   in loop m n
 
+let row x = 
+  let rec loop = function
+    | 0 -> []
+    | i -> (x, i)::loop (i-1)
+  in loop !gridc
+
+let column x =
+  let rec loop = function
+    | 0 -> []
+    | i -> (i, x)::loop (i-1)
+  in loop !gridr
+  
 let rows () = 
-  let m = !gridr in
-  let n = !gridc in
-  let rec loop1 r = function
+  let rec loop = function
     | 0 -> []
-    | c -> (r, c) :: loop1 r (c-1)
-  in let rec loop2 = function
-    | 0 -> []
-    | r -> (loop1 r n) :: (loop2 (r-1))
-  in loop2 m
+    | r -> row r :: loop (r-1)
+  in loop !gridr
 
 let columns () = 
-  let m = !gridr in
-  let n = !gridc in
-  let rec loop1 c = function
+  let rec loop = function
     | 0 -> []
-    | r -> (r, c) :: loop1 c (r-1)
-  in let rec loop2 = function
-    | 0 -> []
-    | c -> (loop1 c m) :: (loop2 (c-1))
-  in loop2 m
+    | c -> column c :: loop (c-1)
+  in loop !gridc
 
 let cell_grid l = List.map (fun (r, c) -> Past.RC(l, Past.Integer(l, r), Past.Integer(l, c))) (get_cells 0)
 
@@ -188,8 +189,7 @@ let line_constraints l s x line =
     @ List.map (fun rc -> Ast.Dec(Ast.Bool, to_cell rc "_source")) cells
     @ List.map (fun rc -> Ast.Dec(Ast.Int, to_cell rc "_count")) cells
     @ (if line then [] else List.map (fun rc -> Ast.Dec(Ast.Int, to_cell rc "_sink")) cells)
-    @ (if line then [] else [Ast.Op(Ast.MultiOp(Ast.Add, List.map (fun rc -> Ast.ITE(to_cell rc "_sink", Ast.Integer(1), Ast.Integer(0))) cells)
-      , Ast.Equal, Ast.Integer(1))])
+    @ (if line then [] else [Ast.Op(Ast.MultiOp(Ast.Add, List.map (fun rc -> Ast.ITE(to_cell rc "_sink", Ast.Integer(1), Ast.Integer(0))) cells), Ast.Equal, Ast.Integer(1))])
     @ List.map (fun (rc1, rc2) -> Ast.Op(to_var rc1 rc2, Ast.LeftImp, Ast.Op(to_cell rc1 "", Ast.And, to_cell rc2 ""))) line_segments
     @ List.map (fun (rc1, rc2) -> Ast.Op(to_var rc1 rc2, Ast.LeftImp, Ast.UnaryOp(Ast.Not, to_var rc2 rc1))) line_segments
     @ List.map (fun (rc1, rc2) -> Ast.Op(Ast.Op(to_cell rc1 "", Ast.And, to_cell rc2 ""), Ast.LeftImp, Ast.MultiOp(Ast.Or, 
@@ -201,7 +201,7 @@ let line_constraints l s x line =
     @ List.map (fun rc -> Ast.Op(to_cell rc "_source", Ast.LeftImp, (Ast.Op(to_cell rc "_count", Ast.Equal, Ast.Integer(0))))) cells
     @ List.map (fun (rc1, rc2) -> Ast.Op(to_var rc1 rc2, Ast.LeftImp, Ast.Op(to_cell rc1 "_count", Ast.LT, to_cell rc2 "_count"))) line_segments
     @ List.map (fun rc1 -> Ast.Op(Ast.MultiOp(Ast.Add, List.map (fun rc2 -> Ast.ITE(to_var rc1 rc2, Ast.Integer(1), Ast.Integer(0))) (surrounding x rc1))
-    , Ast.LTE, Ast.ITE(to_cell rc1 "_source", Ast.Integer(2), Ast.Integer(1)))) cells
+      , Ast.LTE, Ast.ITE(to_cell rc1 "_source", Ast.Integer(2), Ast.Integer(1)))) cells
     @ List.map (fun rc1 -> Ast.Op(to_cell rc1 "_source", Ast.LeftImp, Ast.UnaryOp(Ast.Not, Ast.MultiOp(Ast.Or, 
       List.map (fun rc2 -> to_var rc2 rc1) (surrounding x rc1))))) cells
     @ (if line then List.map (fun rc1 -> Ast.Op(Ast.MultiOp(Ast.Add,
@@ -438,13 +438,14 @@ let rec replace_spec_op expr vars =
 let scan_rc expr vars =
   let rec loop e =
     match e with
-      | Past.RC(_, e1, e2) -> let f v = function
-          | None -> [v]
+      | Past.RC(_, e1, e2) -> 
+        let f v x = function
+          | None -> [(v, x)]
           | Some _ -> []
-        in let m e = match e with
-          | Past.Var(_, v) -> let (_, e1) = find e vars in f v e1
+        in let m e x = match e with
+          | Past.Var(_, v) -> let (_, e1) = find e vars in f v x e1
           | _ -> []
-        in m e1 @ m e2
+        in m e1 (!gridr) @ m e2 (!gridc)
       | Past.Corner(_, e1) -> loop e1
       | Past.Op(_, e1, _, e2) -> loop e1 @ loop e2
       | Past.UnaryOp(_, _, e1) -> loop e1
@@ -468,52 +469,59 @@ let scan_rc expr vars =
       | _ -> []
   in loop expr
 
-let replace_rc x v expr = 
-  let rec loop e = 
-    match e with
-      | Past.RC(l, r, c) -> let f e1 = match e1 with
-          | Past.Var(_, v1) -> if v = v1 then Past.Integer(l, x) else e1
-          | Past.Integer(_, _) -> e1
-        in Past.RC(l, f r, f c)  
-      | Past.Corner(l, e) -> Past.Corner(l, loop e)
-      | Past.Op(l, e1, op, e2) -> Past.Op(l, loop e1, op, e2)
-      | Past.UnaryOp(l, uop, e1) -> Past.UnaryOp(l, uop, loop e1)
-      | Past.SpecOp(l, e1, sop, e2) -> Past.SpecOp(l, loop e1, sop, loop e2)
-      | Past.Dec(l, dt, e1, e2) -> (match e2 with
-        | Some e3 -> Past.Dec(l, dt, loop e1, Some (loop e3))
-        | None -> e)
-      | Past.Assign(l, e1, e2) -> Past.Assign(l, loop e1, loop e2)
-      | Past.Utils(l, e1, u) -> Past.Utils(l, loop e1, u)
-      | Past.Quantifier(l, q, e1, g, e2) -> let Past.Group(_, ng) = loop (Past.Group(l, g)) in Past.Quantifier(l, q, loop e1, ng, loop e2)
-      | Past.List(l, ls) -> Past.List(l, List.map (fun e1 -> loop e1) ls)
-      | Past.Group(l, g) -> (match g with
-        | Past.Instance(e1) -> Past.Group(l, Past.Instance(loop e1))
-        | _ -> e)
-      | Past.Range(l, e1, e2) -> Past.Range(l, loop e1, loop e2)
-      | Past.Member(l, e1, e2) -> Past.Member(l, loop e1, loop e2)
-      | Past.Sugar(l, dt, e1, c) -> Past.Sugar(l, dt, loop e1, c)
-  in loop expr
-      
+let replace_rc vs expr = 
+  let helper v x (e : Past.expr) =
+    let rec loop e = 
+      match e with
+        | Past.RC(l, r, c) -> let f e1 = match e1 with
+            | Past.Var(_, v1) -> if v = v1 then Past.Integer(l, x) else e1
+            | Past.Integer(_, _) -> e1
+          in Past.RC(l, f r, f c)  
+        | Past.Corner(l, e) -> Past.Corner(l, loop e)
+        | Past.Op(l, e1, op, e2) -> Past.Op(l, loop e1, op, loop e2)
+        | Past.UnaryOp(l, uop, e1) -> Past.UnaryOp(l, uop, loop e1)
+        | Past.SpecOp(l, e1, sop, e2) -> Past.SpecOp(l, loop e1, sop, loop e2)
+        | Past.Dec(l, dt, e1, e2) -> (match e2 with
+          | Some e3 -> Past.Dec(l, dt, loop e1, Some (loop e3))
+          | None -> e)
+        | Past.Assign(l, e1, e2) -> Past.Assign(l, loop e1, loop e2)
+        | Past.Utils(l, e1, u) -> Past.Utils(l, loop e1, u)
+        | Past.Quantifier(l, q, e1, g, e2) -> let Past.Group(_, ng) = loop (Past.Group(l, g)) in Past.Quantifier(l, q, loop e1, ng, loop e2)
+        | Past.List(l, ls) -> Past.List(l, List.map loop ls)
+        | Past.Group(l, g) -> (match g with
+          | Past.Instance(e1) -> Past.Group(l, Past.Instance(loop e1))
+          | _ -> e)
+        | Past.Range(l, e1, e2) -> Past.Range(l, loop e1, loop e2)
+        | Past.Member(l, e1, e2) -> Past.Member(l, loop e1, loop e2)
+        | Past.Sugar(l, dt, e1, c) -> Past.Sugar(l, dt, loop e1, c)
+        | Past.Integer(_, z) -> e
+        | Past.Var(_, vz) -> e
+
+    in loop e
+  in let rec loop2 ls = function
+    | (v, x)::vxs -> let loc = get_loc (List.hd ls) in 
+      loop2 (List.concat_map (fun e -> List.map (fun y -> Past.Op(loc, Past.Op(loc, Past.Var(loc, v), Past.Equal, Past.Integer(loc, y)), Past.And, helper v y e)) (List.init x (Int.add 1))) ls) vxs
+    | [] -> ls
+  in loop2 [expr] vs
+ 
 let rec store_vars dt vars = function
   | v::vs -> store_vars dt ((dt, v, None)::vars) vs
   | [] -> vars
 
-
-let rec translate_rc r c vars = (Ast.Var("temp"), vars)
-
-(*
-let rec translate_rc r c vars =
-  let f x = match x with
+let translate_rc r c vars = 
+  let f e = match e with
     | Past.Integer(_, i) -> i
-    | Past.Var(_, v) -> let (_, e) = find x vars in (match e with
-      | Some (Past.Integer(_, i)) -> i
-      | None -> Ast.MultiOp(Ast.Or, List.map (fun i -> Ast.Op(Ast.)) (init !gridr =)))
-  in 
-*)
-and translate_term e1 op e2 vars =
-  let (expr1, vars1) = translate_expr e1 vars in
-  let (expr2, vars2) = translate_expr e2 vars1 in
-  (Ast.Op(expr1, translate_op op, expr2), vars2)
+    | Past.Var(_, v) -> (match find e vars with
+      | (_, Some (Past.Integer(_, i))) -> i)
+  in (Ast.Var(sprintf "r%ic%i" (f r) (f c)), vars)
+
+let rec translate_term e1 op e2 vars =
+  match op with
+    | Past.RightImp -> translate_term e2 Past.LeftImp e1 vars
+    | Past.BiImp -> translate_term e1 Past.Equal e2 vars
+    | _ -> let (expr1, vars1) = translate_expr e1 vars in
+      let (expr2, vars2) = translate_expr e2 vars1 in
+      (Ast.Op(expr1, translate_op op, expr2), vars2)
 
 and translate_unary_term uop e vars =
   let (expr, _) = translate_expr e vars in
@@ -623,14 +631,33 @@ and translate_quantifier l q d g c vars =
         | Past.Exists -> Ast.Or
       in match d with
         | Past.Dec(_, Past.Cell, Past.List(_, ls), value) -> 
-          let split = function
-            | [vx] -> Ast.MultiOp(op, (List.map (fun v -> let (expr, _) = 
-              translate_expr (substitute v (get_var vx) c) vars in expr) (translate_group l g vars)))
+          let split group ng z = match z with
+            | [vx] -> Ast.MultiOp(op, List.map (fun rc -> let (expr, _) = 
+              translate_expr (substitute rc (get_var vx) c) vars in expr) group)
+            | vx::vs ->
+              let (nv, _) = translate_quantifier l q (Past.Dec(l, Past.Cell, Past.List(l, vs), value)) ng
+                (Past.Quantifier(l, q, (Past.Dec(l, Past.Cell, Past.List(l, [vx]), value)), ng,
+                replace_spec_op c (store_vars Past.Cell vars ls))) vars
+              in nv
+
+          in match g with
+            | Past.Row(Some (Past.Var(_, v))) -> (Ast.MultiOp(Or, (List.mapi (fun i -> fun group -> 
+              Ast.Op(Ast.Op(Ast.Var(v), Ast.Equal, Ast.Integer(!gridr-i)), Ast.And, split group (Past.Row(Some (Past.Integer(l, !gridr-i)))) ls)) 
+              (List.map (fun lss -> List.map (fun (r, c) -> Past.RC(l, Past.Integer(l, r), Past.Integer(l, c))) lss) (rows ())))), vars)
+            | _ -> (split (translate_group l g vars) g ls, vars)
+          
+
+(*
+          let split group = function
+            | [vx] -> Ast.MultiOp(op, List.map (fun v -> let (expr, _) = 
+              translate_expr (substitute v (get_var vx) c) vars in expr) group)
             | vx::vs -> let (nv, _) = translate_quantifier l q (Past.Dec(l, Past.Cell, Past.List(l, vs), value)) g
                 (Past.Quantifier(l, q, (Past.Dec(l, Past.Cell, Past.List(l, [vx]), value)), g,
                 replace_spec_op c (store_vars Past.Cell vars ls))) vars
-              in nv
-          in (split ls, vars)
+              in nv 
+          in (split (translate_group l g vars) ls, vars)  *)
+
+          (*
         | Past.Dec(_, Past.Region, Past.List(_, ls), value) -> 
           let split = function
             | [vx] -> Ast.MultiOp(op, (List.map (fun v -> let (expr, _) = 
@@ -642,15 +669,22 @@ and translate_quantifier l q d g c vars =
           in let (reg, _) = translate_expr d vars 
           in (Ast.Bundle(reg::[split ls]), vars)
 
-and translate_group l g vars = match g with
-  | Past.Grid -> cell_grid l
-  | Past.Instance(e) -> (match e with
-    | Past.List(_, es) -> (expand_list es)
-    | Past.Var(_, v) -> let (dt, Some ls) = find e vars
-      in match dt, ls with
-        | Past.Region, Past.List(_, list) -> list
-        | Past.CentreLine, Past.List(_, list) -> List.map (fun (r, c) -> Past.RC(l, Past.Integer(l, r), Past.Integer(l, c)))
-          (get_centreline_cells list))
+*)
+
+and translate_group l g vars = 
+  let to_rc (r, c) = Past.RC(l, Past.Integer(l, r), Past.Integer(l, c))
+  in match g with
+    | Past.Grid -> cell_grid l
+    | Past.Row(Some e) -> (match e with
+      | Past.Integer(_, i) -> List.map to_rc (row i)
+      | Past.Var(_, v) -> (match find e vars with
+        | (_, Some (Past.Integer(_, i))) -> List.map to_rc (row i)))
+    | Past.Instance(e) -> (match e with
+      | Past.List(_, es) -> (expand_list es)
+      | Past.Var(_, v) -> let (dt, Some ls) = find e vars
+        in match dt, ls with
+          | Past.Region, Past.List(_, list) -> list
+          | Past.CentreLine, Past.List(_, list) -> List.map to_rc (get_centreline_cells list))
         
 and translate_list ls vars = 
   let rec loop = function
@@ -681,9 +715,9 @@ and translate_sugar dt e c vars =
   in match dt with
     | Past.Cell -> (match g with
       | Past.Grid -> (Ast.MultiOp(con, to_var (get_cells 0)), vars)
-      | Past.Row -> (Ast.MultiOp(Ast.And, List.map (fun l -> Ast.MultiOp(con, to_var l)) (rows ())), vars)
-      | Past.Column -> (Ast.MultiOp(Ast.And, List.map (fun l -> Ast.MultiOp(con, to_var l)) (columns ())), vars)
-      | Past.Boxes -> (Ast.MultiOp(Ast.And, (List.filter_map (fun (dt, v, Some e) ->
+      | Past.Row(None) -> (Ast.MultiOp(Ast.And, List.map (fun l -> Ast.MultiOp(con, to_var l)) (rows ())), vars)
+      | Past.Column(None) -> (Ast.MultiOp(Ast.And, List.map (fun l -> Ast.MultiOp(con, to_var l)) (columns ())), vars)
+      | Past.Boxes(None) -> (Ast.MultiOp(Ast.And, (List.filter_map (fun (dt, v, Some e) ->
         match e with
           | Past.List(_, ls) -> 
             if dt = Past.Box then Some (Ast.MultiOp(con, List.map (fun (Past.RC(_, Past.Integer(_, r), Past.Integer(_, c))) -> 
@@ -706,11 +740,7 @@ and translate_expr e vars =
   | Past.Boolean(_, b) -> (Ast.Boolean(b), vars)
   | Past.RC(_, r, c) -> translate_rc r c vars
   | Past.Var(_, v) -> (Ast.Var(v), vars)
-  | Past.Op(_, e1, op, e2) -> 
-    (match op with
-    | Past.RightImp -> translate_term e2 Past.LeftImp e1 vars
-    | Past.BiImp -> translate_term e1 Past.Equal e2 vars
-    | _ -> translate_term e1 op e2 vars)
+  | Past.Op(_, e1, op, e2) -> translate_term e1 op e2 vars
   | Past.UnaryOp(_, uop, e) -> translate_unary_term uop e vars
   | Past.SpecOp(l, e1, sop, e2) -> translate_spec_term l e1 sop e2 vars
   | Past.Dec(_, d, v, e) -> translate_dec d v e vars
@@ -759,7 +789,9 @@ let convert = function
   | ((_, r, c), xs) -> gridr := r; gridc := c;
     let rec loop exprs vars = 
       match exprs with
-      | e::es -> List.map (fun v -> Ast.Bundle(List.map (fun x -> translate_expr (replace_rc x v e) vars) (List.init !gridr =))) (scan_rc e vars)
-        else let (expr, nvars) = translate_expr e vars in expr :: (loop es nvars)
+      | e::es -> let uninit_vars = scan_rc e vars in 
+        if uninit_vars = [] then let (expr, nvars) = translate_expr e vars in expr :: (loop es nvars)
+        else let (_, nvars) = translate_expr e vars in Ast.MultiOp(Ast.Or, 
+          List.map (fun ex -> let (ex1, _) = translate_expr ex vars in ex1) (replace_rc uninit_vars e))::loop es nvars
       | [] -> [init_named_regions vars]
     in ((r, c), flatten (replace (loop xs [])))

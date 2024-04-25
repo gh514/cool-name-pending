@@ -65,10 +65,10 @@ type spec_op =
 
 and group = 
   | Grid
-  | Row
-  | Column
+  | Row of expr option
+  | Column of expr option
   | Regions
-  | Boxes
+  | Boxes of expr option
   | Universe
   | Instance of expr
 

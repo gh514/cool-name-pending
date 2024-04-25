@@ -84,6 +84,7 @@ rule token = parse
     | ("In")          {MEMBER}
     | ("Are")         {ARE}
     | ("Distinct")    {DISTINCT}
+    | ("Unique")      {DISTINCT}
     | ("Equal")       {EQUIVALENT}
     | ("Diff")        {DIFF}
     | (".5")          {HALF}
