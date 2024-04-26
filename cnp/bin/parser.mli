@@ -18,6 +18,7 @@ type token =
   | ROW
   | COLUMN
   | BOX
+  | CELLDEC
   | ADD
   | SUB
   | MUL

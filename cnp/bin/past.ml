@@ -90,4 +90,5 @@ and expr =
   | Range of loc * expr * expr
   | Member of loc * expr * expr
   | Sugar of loc * data_type * expr * constraints
+  | CellDec of loc * expr
 

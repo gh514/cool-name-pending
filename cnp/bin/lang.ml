@@ -5,8 +5,6 @@ let file = "test.cnp"
 
 let init_lexbuf file = 
   let program = In_channel.read_all (Printf.sprintf "./%s" file)
-  
-
   in let lexbuf = Lexing.from_string (Str.replace_first (Str.regexp "Normal Sudoku Rules Apply") 
     "Box box1 = [R1C1 To R3C3];
     Box box2 = [R1C4 To R3C6];
@@ -18,9 +16,12 @@ let init_lexbuf file =
     Box box8 = [R7C4 To R9C6];
     Box box9 = [R7C7 To R9C9];
   
+    
     Cells In Rows Are Distinct;
     Cells In Columns Are Distinct;
-    Cells In Boxes Are Distinct"
+    Cells In Boxes Are Distinct;
+    
+    Cells Contain Digits 1 To 9"
     program)
   in let _ = lexbuf.lex_curr_p <- { pos_fname = file; pos_lnum = 1; pos_bol = 0; pos_cnum = 0; }
   in lexbuf
