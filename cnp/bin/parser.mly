@@ -129,7 +129,7 @@ expr:
     | expr LEFTIMP expr                     {Past.Op(location(), $1, Past.LeftImp, $3)}
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
-    | simple_expr ADJACENT simple_expr MEMBER simple_expr      %prec HIGH  
+    | simple_expr ADJACENT simple_expr MEMBER simple_expr %prec HIGH  
                                             {Past.SpecOp(location(), $1, Past.Adjacent(Some $5), $3)}
     | simple_expr ADJACENT simple_expr %prec LOW     {Past.SpecOp(location(), $1, Past.Adjacent(None), $3)}
     | expr ADJACENT CROSS INT expr          {Past.SpecOp(location(), $1, Past.CellLineAdjacent($4), $5)}
