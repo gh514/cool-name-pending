@@ -2,7 +2,10 @@
 include Printf
 
 exception Err of string
-exception RegVar
+exception RegVar of Past.expr
+exception UndecVar
+exception Internal
+exception NotVar
 
 let gridr = ref 0
 let gridc = ref 0
@@ -48,12 +51,7 @@ let get_loc = function
   | Past.Member(l, _, _) -> l
   | Past.Sugar(l, _, _, _) -> l
   | Past.CellDec(l, _) -> l
-
-let rec find v = function
-  | (dt, nv, e)::nvars -> (match v, nv with
-    | Past.Var(_, v1), Past.Var(_, v2) -> if v1 = v2 then Some (dt, e) else find v nvars
-    | _ -> None)
-  | [] -> None
+  | Past.ITE(l, _, _, _) -> l
 
 let get_int = function
   | Past.Integer(_, n) -> n
@@ -68,43 +66,72 @@ let get_var = function
   | Past.RC(_, Past.Integer(_, r), Past.Integer(_, c)) -> sprintf "r%ic%i" r c
   | _ -> raise (Err "Variable expected")
 
-let eval e vars = -10
+let rec find v vars =
+  let v1 = (match v with
+    | Past.Var(_, v1) -> v1
+    | _ -> raise NotVar)
+  in match vars with
+    | (dt, nv, e)::nvars -> (match nv with
+      | Past.Var(_, v2) -> if v1 = v2 then (dt, e) else find v nvars
+      | _ -> raise Internal)
+    | [] -> raise UndecVar
+
+let safe_find e vars = try find e vars with UndecVar -> raise (Err (sprintf "Variable %s not initialised" (get_var e)))
+
+let rec eval_num e vars = match e with
+  | Past.Integer(_, i) -> i
+  | Past.Var(_) -> let (_, Some e2) = safe_find e vars in eval_num e2 vars 
+  | Past.Op(_, e1, op, e2) -> (match op with
+    | Past.Add -> eval_num e1 vars + eval_num e2 vars
+    | Past.Sub -> eval_num e1 vars - eval_num e2 vars
+    | Past.Mul -> eval_num e1 vars * eval_num e2 vars
+    | Past.Div -> eval_num e1 vars / eval_num e2 vars
+    | _ -> raise (Err "Invalid operation"))
+  | Past.UnaryOp(_, uop, e1) -> (match uop with
+    | Past.Neg -> - eval_num e1 vars
+    | Past.Abs -> abs (eval_num e1 vars))
+  | _ -> raise (Err "Invalid operand")
 
 let remove_duplicates = List.fold_left (fun xs -> fun x -> if List.mem x xs then xs else x::xs) [] 
 
 let get_rc e vars = match e with
-  | Past.RC(_, r, c) -> let f e2 = match e2 with
-      | Past.Integer(_, i) -> i
-      | Past.Var(_, v) -> (match find e2 vars with
-        | Some (_, x) -> (match x with
-          | Some (Past.Integer(_, i)) -> i
+  | Past.RC(_, r, c) -> 
+    let check_rc x limit = if 1 <= x && x <= limit then x else raise (Err "Invalid index")
+    in let f e2 limit =
+     match e2 with
+      | Past.Integer(_, i) -> check_rc i limit
+      | Past.Var(_, v) -> let (_, x) = safe_find e2 vars
+        in (match x with
+          | Some (Past.Integer(_, i)) -> check_rc i limit
           | Some (_) -> raise (Err "Invalid type")
-          | None -> raise (RegVar))
-        | None -> raise (Err "Variable not declared")
-      | _ -> eval e2 vars)
-    in (f r, f c)
+          | None -> raise (RegVar e2))
+      | _ -> eval_num e2 vars
+    in (f r !gridr, f c !gridc)
 
 let rec substitute var_new var_old expr =
   let rec loop = function
-    | e::es -> (substitute var_new var_old e) :: loop es
+    | e::es -> (helper e) :: loop es
     | [] -> []
-  in match expr with
+  and helper expr = match expr with
     | Past.Var(_, v) -> if v = var_old then var_new else expr
-    | Past.Op(l, e1, op, e2) -> Past.Op(l, substitute var_new var_old e1, op, substitute var_new var_old e2)
-    | Past.UnaryOp(l, uop, e) -> Past.UnaryOp(l, uop, substitute var_new var_old e)
-    | Past.SpecOp(l, e1, sop, e2) -> Past.SpecOp(l, substitute var_new var_old e1, sop, substitute var_new var_old e2)
-    | Past.Dec(l, dt, v, Some def) -> Past.Dec(l, dt, v, Some (substitute var_new var_old def))
-    | Past.Assign(l, v, e) -> Past.Assign(l, v, substitute var_new var_old e)
-    | Past.Utils(l, e, u) -> Past.Utils(l, substitute var_new var_old e, u)
-    | Past.Quantifier(l, q, d, g, e) -> Past.Quantifier(l, q, d, g, substitute var_new var_old e)
+    | Past.Op(l, e1, op, e2) -> Past.Op(l, helper e1, op, helper e2)
+    | Past.UnaryOp(l, uop, e) -> Past.UnaryOp(l, uop, helper e)
+    | Past.SpecOp(l, e1, sop, e2) -> Past.SpecOp(l, helper e1, sop, helper e2)
+    | Past.Dec(l, dt, v, Some def) -> Past.Dec(l, dt, v, Some (helper def))
+    | Past.Assign(l, v, e) -> Past.Assign(l, v, helper e)
+    | Past.Utils(l, e, u) -> Past.Utils(l, helper e, u)
+    | Past.Quantifier(l, q, d, g, e) -> Past.Quantifier(l, q, d, g, helper e)
     | Past.List(l, ls) -> Past.List(l, loop ls)
     | Past.Group(_, g) -> (match g with
-      | Past.Instance(e) -> substitute var_new var_old e
+      | Past.Instance(e) -> helper e
       | _ -> expr)
-    | Past.Range(l, e1, e2) -> Past.Range(l, substitute var_new var_old e1, substitute var_new var_old e2)
-    | Past.Member(l, e1, e2) -> Past.Member(l, substitute var_new var_old e1, substitute var_new var_old e2)
-    | Past.Sugar(l, dt, g, c) -> Past.Sugar(l, dt, substitute var_new var_old g, c)
+    | Past.Range(l, e1, e2) -> Past.Range(l, helper e1, helper e2)
+    | Past.Member(l, e1, e2) -> Past.Member(l, helper e1, helper e2)
+    | Past.Sugar(l, dt, g, c) -> Past.Sugar(l, dt, helper g, c)
+    | Past.CellDec(l, e) -> Past.CellDec(l, helper e)
+    | Past.ITE(l, e1, e2, e3) -> Past.ITE(l, helper e1, helper e2, helper e3)
     | _ -> expr
+  in helper expr
 
 let make_var_pair r1 c1 r2 c2 = Ast.Var(sprintf "r%ic%itor%ic%i" r1 c1 r2 c2)
 
@@ -267,7 +294,6 @@ let get_parent_constraints () =
         in loop (List.filter (fun ((_, _), (rz, cz)) -> not ((rx, cx) = (rz, cz))) adj_cells)
         ))
     ))) adj_cells
-
   in constr_loop !gridr !gridc parent_constraints
 
 let get_children_constraints () =
@@ -367,7 +393,7 @@ let translate_edgeline l v vars =
     in if List.mem ((r1, c1), (r2, c2)) (List.concat_map pair lines) then t else Ast.UnaryOp(Ast.Not, t))) adj_lines, 
     Past.List(get_loc (List.hd l), List.map (fun (rc1, rc2) -> Past.Range(get_loc rc1, rc1, rc2)) (List.concat_map pair past_lines)))
 
-let expand_range vars (rc1, rc2)  =
+let expand_range vars (rc1, rc2) =
   let (r1, c1), (r2, c2) = get_rc rc1 vars, get_rc rc2 vars in
     let x1 = max r1 r2 in
     let y1 = max c1 c2 in
@@ -391,7 +417,8 @@ let expand_list ls vars =
 let define_region l init nv vars = 
   let t = expand_list l vars
   in let cells = List.map (fun rc -> get_rc rc vars) t
-  in let (r_root, c_root) = List.hd cells in (Ast.Bundle(init@[Ast.MultiOp(Ast.And, List.map (fun (r, c) -> 
+  in let (r_root, c_root) = List.hd cells
+  in (Ast.Bundle(init@[Ast.MultiOp(Ast.And, List.map (fun (r, c) -> 
     let v = Ast.Op(Ast.Var(sprintf "r%ic%i_root" r c), Ast.Equal, Ast.Integer(!gridc*(r_root-1)+c_root)) 
     in if List.mem (r, c) cells then v else Ast.UnaryOp(Ast.Not, v)) (get_cells 0))])
     , (Past.Region, nv, Some (Past.List(get_loc (List.hd t), t)))::vars)
@@ -420,13 +447,13 @@ let type_spec_op e vars =
     | Past.Integer(_, _) -> Past.Int
     | Past.Boolean(_, _) -> Past.Bool
     | Past.RC(_, _, _) -> Past.Cell
-    | Past.Var(_) -> let Some (dt, _) = find e vars in dt
+    | Past.Var(_) -> let (dt, _) = safe_find e vars in dt
     | _ -> raise (Err "Invalid operand")
 
-let rec replace_spec_op expr vars = 
-  match expr with
-    | Past.Op(l, e1, op, e2) -> Past.Op(l, replace_spec_op e1 vars, op, replace_spec_op e2 vars)
-    | Past.UnaryOp(l, uop, e) -> Past.UnaryOp(l, uop, replace_spec_op e vars)
+let replace_spec_op expr vars = 
+  let rec loop expr = match expr with
+    | Past.Op(l, e1, op, e2) -> Past.Op(l, loop e1, op, loop e2)
+    | Past.UnaryOp(l, uop, e) -> Past.UnaryOp(l, uop, loop e)
     | Past.SpecOp(l, e1, sop, e2) -> (match type_spec_op e1 vars, sop, type_spec_op e2 vars with
       | Past.Cell, Past.Adjacent(None), Past.Cell -> Past.SpecOp(l, e1, Past.CellAdjacent, e2)
       | Past.Region, Past.Adjacent(None), Past.Region -> Past.SpecOp(l, e1, Past.RegionAdjacent, e2)
@@ -435,29 +462,35 @@ let rec replace_spec_op expr vars =
       | Past.Cell, Past.Adjacent(None), Past.EdgeLine -> Past.SpecOp(l, e1, Past.CellLineAdjacent(-1), e2)
       | _ -> expr)
     | Past.Dec(l, dt, v, e) -> (match e with
-      | Some e1 -> Past.Dec(l, dt, v, Some (replace_spec_op e1 vars))
+      | Some e1 -> Past.Dec(l, dt, v, Some (loop e1))
       | None -> expr)
-    | Past.Assign(l, e1, e2) -> Past.Assign(l, replace_spec_op e1 vars, replace_spec_op e2 vars)
-    | Past.Utils(l, e, u) -> Past.Utils(l, replace_spec_op e vars, u)
-    | Past.Quantifier(l, q, d, g, c) -> Past.Quantifier(l, q, replace_spec_op d vars, g, replace_spec_op c vars)
-    | Past.List(l, ls) -> Past.List(l, List.map (fun e -> replace_spec_op e vars) ls)
+    | Past.Assign(l, e1, e2) -> Past.Assign(l, loop e1, loop e2)
+    | Past.Utils(l, e, u) -> Past.Utils(l, loop e, u)
+    | Past.Quantifier(l, q, d, g, c) -> Past.Quantifier(l, q, loop d, g, loop c)
+    | Past.List(l, ls) -> Past.List(l, List.map (fun e -> loop e) ls)
     | Past.Group(l, g) -> (match g with
-      | Past.Instance(e) -> Past.Group(l, Past.Instance(replace_spec_op e vars))
+      | Past.Instance(e) -> Past.Group(l, Past.Instance(loop e))
       | _ -> expr)
-    | Past.Range(l, e1, e2) -> Past.Range(l, replace_spec_op e1 vars, replace_spec_op e2 vars)
-    | Past.Member(l, e1, e2) -> Past.Member(l, replace_spec_op e1 vars, replace_spec_op e2 vars)
-    | Past.Sugar(l, dt, e1, c) -> Past.Sugar(l, dt, replace_spec_op e1 vars, c)
+    | Past.Range(l, e1, e2) -> Past.Range(l, loop e1, loop e2)
+    | Past.Member(l, e1, e2) -> Past.Member(l, loop e1, loop e2)
+    | Past.Sugar(l, dt, e1, c) -> Past.Sugar(l, dt, loop e1, c)
+    | Past.CellDec(l, e) -> Past.CellDec(l, loop e)
+    | Past.ITE(l, e1, e2, e3) -> Past.ITE(l, loop e1, loop e2, loop e3)
     | _ -> expr
+  in loop expr
 
 let scan_rc expr vars =
-  let rec loop e =
+  let rec match_group = function
+    | Past.Instance(e) -> loop e
+    | _ -> []
+  and loop e =
     match e with
       | Past.RC(_, e1, e2) -> 
         let f v x = function
           | None -> [(v, x)]
           | Some _ -> []
         in let m e x = match e with
-          | Past.Var(_, v) -> let Some (_, e1) = find e vars in f v x e1
+          | Past.Var(_, v) -> let (_, e1) = safe_find e vars in f v x e1
           | _ -> []
         in m e1 (!gridr) @ m e2 (!gridc)
       | Past.Corner(_, e1) -> loop e1
@@ -469,18 +502,14 @@ let scan_rc expr vars =
         | None -> [])
       | Past.Assign(_, e1, e2) -> loop e1 @ loop e2
       | Past.Utils(_, e1, _) -> loop e1
-      | Past.Quantifier(_, _, e1, g, e2) -> loop e1 @ loop e2 @
-        (match g with
-          | Past.Instance(e3) -> loop e3
-          | _ -> [])
-      | Past.List(_, l) -> let f a b = a @ loop b in List.fold_left f [] l
-      | Past.Group(_, g) -> (match g with
-        | Instance(e) -> loop e
-        | _ -> [])
+      | Past.Quantifier(_, _, e1, g, e2) -> loop e1 @ loop e2 @ match_group g
+      | Past.List(_, l) -> let f a b = loop a @ b in List.fold_right f l []
+      | Past.Group(_, g) -> match_group g
       | Past.Range(_, e1, e2) -> loop e1 @ loop e2
       | Past.Member(_, e1, e2) -> loop e1 @ loop e2
       | Past.Sugar(_, _, e1, _) -> loop e1
       | Past.CellDec(_, e1) -> loop e1
+      | Past.ITE(_, e1, e2, e3) -> loop e1 @ loop e2 @ loop e3
       | _ -> []
   in loop expr
 
@@ -511,13 +540,51 @@ let replace_rc vs expr =
         | Past.Member(l, e1, e2) -> Past.Member(l, loop e1, loop e2)
         | Past.Sugar(l, dt, e1, c) -> Past.Sugar(l, dt, loop e1, c)
         | Past.CellDec(l, e1) -> Past.CellDec(l, loop e1)
+        | Past.ITE(l, e1, e2, e3) -> Past.ITE(l, loop e1, loop e2, loop e3)
         | _ -> e
     in loop e
   in let rec loop2 ls = function
     | (v, x)::vxs -> let loc = get_loc (List.hd ls) in 
-      loop2 (List.concat_map (fun e -> List.map (fun y -> Past.Op(loc, Past.Op(loc, Past.Var(loc, v), Past.Equal, Past.Integer(loc, y)), Past.And, helper v y e)) (List.init x (Int.add 1))) ls) vxs
+      loop2 (List.concat_map (fun e -> List.map (fun y -> Past.Op(loc, Past.Op(loc, Past.Var(loc, v), Past.Equal,
+        Past.Integer(loc, y)), Past.And, helper v y e)) (List.init x (Int.add 1))) ls) vxs
     | [] -> ls
   in loop2 [expr] vs
+
+let scan_utils expr vars =
+  let rec match_group = function
+    | Past.Instance(e) -> loop e
+    | _ -> []
+  and loop e = 
+    match e with
+      | Past.RC(_, e1, e2) -> loop e1 @ loop e2
+      | Past.Corner(_, e1) -> loop e1
+      | Past.Op(_, e1, _, e2) -> loop e1 @ loop e2
+      | Past.UnaryOp(_, _, e1) -> loop e1
+      | Past.SpecOp(_, e1, _, e2) -> loop e1 @ loop e2
+      | Past.Dec(_, _, e1, e2) -> loop e1 @ (match e2 with
+        | Some e3 -> loop e3
+        | None -> [])
+      | Past.Assign(_, e1, e2) -> loop e1 @ loop e2
+      | Past.Utils(_, e1, u) -> [e1]
+      | Past.Quantifier(_, _, e1, g, e2) -> loop e1 @ loop e2 @ match_group g
+      | Past.List(_, l) -> let f a b = loop a @ b in List.fold_right f l []
+      | Past.Group(_, g) -> match_group g
+      | Past.Range(_, e1, e2) -> loop e1 @ loop e2
+      | Past.Member(_, e1, e2) -> loop e1 @ loop e2
+      | Past.Sugar(_, _, e1, _) -> loop e1
+      | Past.CellDec(_, e1) -> loop e1
+      | Past.ITE(_, e1, e2, e3) -> loop e1 @ loop e2 @ loop e3
+      | _ -> []
+  in List.map get_var (loop expr)
+
+let rec replace_utils expr vs = 
+  let cells = get_cells 0
+  in let loc = get_loc expr
+  in let rec loop2 ls = function
+    | var::vars -> List.concat_map (fun e -> List.map (fun (r, c) -> Past.Op(loc, Past.Var(loc, sprintf "%s_r%ic%i" var r c), Past.LeftImp,
+      substitute (Past.RC(loc, Past.Integer(loc, r), Past.Integer(loc, c))) var e)) cells) ls
+    | [] -> []
+  in Past.List(loc, loop2 [expr] vs)
  
 let rec store_vars dt vars = function
   | v::vs -> store_vars dt ((dt, v, None)::vars) vs
@@ -526,9 +593,10 @@ let rec store_vars dt vars = function
 let translate_rc r c vars = 
   let f e = match e with
     | Past.Integer(_, i) -> i
-    | Past.Var(_) -> (match find e vars with
-      | Some (_, Some (Past.Integer(_, i))) -> i
-      | Some (_, None) -> 99)
+    | Past.Var(_) -> let (_, e1) = safe_find e vars in
+      (match e1 with
+        | Some (Past.Integer(_, i)) -> i
+        | None -> raise (Err "RC Error"))
   in (Ast.Var(sprintf "r%ic%i" (f r) (f c)), vars)
 
 let rec translate_term e1 op e2 vars =
@@ -538,11 +606,12 @@ let rec translate_term e1 op e2 vars =
   in match op with
     | Past.RightImp -> translate_term e2 Past.LeftImp e1 vars
     | Past.BiImp -> translate_term e1 Past.Equal e2 vars
-    | Past.Equal -> (match find e2 vars with
-      | Some (Past.Region, _) -> translate_assignment e1 e2 vars
-      | Some (Past.CentreLine, _) -> translate_assignment e1 e2 vars
-      | _ -> normal)
-
+    | Past.Equal -> (try let (dt, _) = safe_find e2 vars 
+      in (match dt with
+        | Past.Region -> translate_assignment e1 e2 vars
+        | Past.CentreLine -> translate_assignment e1 e2 vars
+        | _ -> normal)
+      with NotVar -> normal)
     | _ -> normal
 
 and translate_unary_term uop e vars =
@@ -568,14 +637,14 @@ and translate_spec_term l e1 sop e2 vars =
       let Past.RC(_, Past.Integer(_, r1), Past.Integer(_, c1)) = e1 in 
       let Past.RC(_, Past.Integer(_, r2), Past.Integer(_, c2)) = e2 in
       ((if abs (r1-r2) <= 1 && abs (c1-c2) <= 1 then
-      (let Some (_, Some (Past.List(_, ls))) = find v vars in
-      let rec loop = function
+      let (_, Some (Past.List(_, ls))) = safe_find v vars 
+      in let rec loop = function
         | Past.Range(_, Past.RC(_, Past.Integer(_, ra1), Past.Integer(_, ca1)), 
           Past.RC(_, Past.Integer(_, ra2), Past.Integer(_, ca2)))::es -> 
           if (r1, c1, r2, c2) = (ra1, ca1, ra2, ca2) || (r1, c1, r2, c2) = (ra2, ca2, ra1, ca1)
           then Ast.Boolean(true) else loop es
         | [] -> Ast.Boolean(false)
-      in loop ls) else Ast.Dead), vars2)
+      in loop ls else Ast.Dead), vars2)
     | Past.CellLineAdjacent(n) -> 
       let constr r c v = List.map (fun ((r1, c1), (r2, c2)) -> Ast.Var(sprintf "%s_r%i.5c%i.5-r%i.5c%i.5" v r1 c1 r2 c2)) 
         [((r, c), (r-1, c)); ((r, c), (r, c-1)); ((r-1, c), (r-1, c-1)); ((r, c-1), (r-1, c-1))]
@@ -601,8 +670,8 @@ and translate_dec d v e vars =
     | Past.Region -> let init = [] in
       (match e with
       | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> define_region l init v1 vars
-      | Some Past.Var(l, v2) -> (match find (Past.Var(l, v2)) vars with
-        | Some (dt, expr) -> (Ast.Dead, (dt, (Past.Var(l, v2)), expr)::vars))
+      | Some Past.Var(l, v2) -> let (dt, expr) = safe_find (Past.Var(l, v2)) vars 
+        in (Ast.Dead, (dt, (Past.Var(l, v2)), expr)::vars)
       | None -> (Ast.Bundle(init), (Past.Region, v1, None)::vars))
     | Past.CentreLine -> let init = create_centreline nv in 
       (match e with
@@ -630,19 +699,21 @@ and translate_dec d v e vars =
       let (es, vs) = List.split nl in (Ast.Bundle(es), List.nth vs ((List.length vs)-1))
 
 and translate_assignment v e vars = 
-  match find v vars with
-    | Some (Past.Region, _) -> let Past.List(_, l) = e in define_region l [] v vars
-    | Some (Past.CentreLine, _) -> let Past.List(_, l) = e in 
+  let (dt, _) = safe_find v vars 
+  in match dt with
+    | Past.Region -> let Past.List(_, l) = e in define_region l [] v vars
+    | Past.CentreLine -> let Past.List(_, l) = e in 
       let (line, nvars) = translate_centreline l (get_var v) vars
       in (Ast.Bundle(line), (Past.CentreLine, v, Some nvars)::vars)
 
 and translate_utils e u vars =
-  match u with
+  let v = get_var e
+  in match u with
   | Past.Size -> (match e with
     | Past.Utils(_, e1, Past.Reg) -> translate_utils e1 u vars
-    | _ -> (Ast.Var(sprintf "%s_size" (get_var e)), vars))
-  | Past.Reg -> (Ast.Var(sprintf "%s_root" (get_var e)), vars)
-  | Past.Sum -> (Ast.Var(sprintf "%s_sum" (get_var e)), vars)
+    | _ -> (Ast.Var(sprintf "%s_size" v), vars))
+  | Past.Reg -> (Ast.Var(sprintf "%s_root" v), vars)
+  | Past.Sum -> (Ast.Var(sprintf "%s_sum" v), vars)
     
 and translate_quantifier l q d g c vars =
   match q with
@@ -677,11 +748,12 @@ and translate_group l g vars =
     | Past.Grid -> cell_grid l
     | Past.Row(Some e) -> (match e with
       | Past.Integer(_, i) -> List.map to_rc (row i)
-      | Past.Var(_) -> (match find e vars with
-        | Some (_, Some (Past.Integer(_, i))) -> List.map to_rc (row i)))
+      | Past.Var(_) -> let (_, e1) = safe_find e vars 
+        in match e1 with
+        | Some (Past.Integer(_, i)) -> List.map to_rc (row i))
     | Past.Instance(e) -> (match e with
       | Past.List(_, es) -> (expand_list es vars)
-      | Past.Var(_) -> let Some (dt, Some ls) = find e vars
+      | Past.Var(_) -> let (dt, Some ls) = safe_find e vars 
         in match dt, ls with
           | Past.Box, Past.List(_, list) -> list
           | Past.Region, Past.List(_, list) -> list
@@ -730,7 +802,9 @@ and translate_sugar dt e c vars =
               Some (Ast.MultiOp(con, List.map (fun (Past.RC(_, Past.Integer(_, r), Past.Integer(_, c))) -> 
               Ast.Var(sprintf "r%ic%i" r c)) ls)) else None
           | _ -> None) vars)), vars)
-      | Past.Instance(v) ->  (let Some (_, Some e) = find v vars in 
+      | Past.Instance(v) ->  (
+        
+        let (_, Some e) = safe_find v vars in 
         match e with
           | Past.List(_, ls) -> Ast.MultiOp(Ast.Unequal, List.map 
             (fun (Past.RC(_, Past.Integer(_, r), Past.Integer(_, c))) -> Ast.Var(sprintf "r%ic%i" r c)) ls), vars))
@@ -740,6 +814,12 @@ and translate_celldec e vars =
     | Past.Range(_, Past.Integer(_, i1), Past.Integer(_, i2)) -> 
       (Ast.Bundle(List.map (fun (r, c) -> Ast.Op(Ast.Op(Ast.Integer(i1), Ast.LTE, Ast.Var(sprintf "r%ic%i" r c)), 
       Ast.And, Ast.Op(Ast.Var(sprintf "r%ic%i" r c), Ast.LTE, Ast.Integer(i2)))) (get_cells 0)), vars)
+
+and translate_ite e1 e2 e3 vars = 
+  let (expr1, _) = translate_expr e1 vars in
+  let (expr2, _) = translate_expr e2 vars in
+  let (expr3, _) = translate_expr e3 vars in
+  (Ast.ITE(expr1, expr2, expr3), vars)
 
 and translate_expr e vars = 
   match e with
@@ -758,6 +838,7 @@ and translate_expr e vars =
   | Past.Member(_, e1, e2) -> translate_member e1 e2 vars
   | Past.Sugar(_, dt, e, c) -> translate_sugar dt e c vars 
   | Past.CellDec(_, e) -> translate_celldec e vars
+  | Past.ITE(_, e1, e2, e3) -> translate_ite e1 e2 e3 vars
   | Past.Group(_) -> raise (Err "Unexpected group")
 
 let init_named_regions vars =
@@ -806,13 +887,21 @@ let convert = function
   | ((_, r, c), xs) -> let _ = gridr := r; gridc := c; in
     let rec loop exprs vars = 
       match exprs with
-      | e::es -> let uninit_vars = scan_rc e vars in printf "good\n";
-        let expr = (init_vars (get_loc e) vars e uninit_vars) in
-        let (_, nvars) = try translate_expr e vars with RegVar -> (Ast.Dead, vars) in
-        expr::loop es nvars
-      | [] -> (let rec find_reg = function
-          | (Past.Region, _, _)::_ -> [Ast.Bundle((init_regions ())@(init_named_regions vars))]
-          | _::vs -> find_reg vs
-          | _ -> []
-        in find_reg vars)
-    in ((r, c), flatten (replace ((loop xs []))))
+      | e::es -> let uninit_vars = scan_rc e vars in
+        let uninit_group = scan_utils e vars in
+        let expr2 = replace_utils e uninit_group in
+        let expr = init_vars (get_loc e) vars expr2 uninit_vars in
+        let (_, nvars) = try translate_expr e vars with RegVar v -> (Ast.Dead, (Past.Region, v, None)::vars) in
+        (expr, nvars)::loop es nvars
+      | [] -> []
+    in let translated = loop xs []
+    in let (_, vars) = List.nth translated ((List.length translated)-1)
+    in let find_reg vars =
+      let rec loop = function
+        | (Past.Region, _, _)::_ -> Ast.Bundle((init_regions ())@(init_named_regions vars))
+        | _::vs -> loop vs
+        | _ -> Ast.Dead
+      in loop vars
+    in ((r, c), flatten ((find_reg vars)::List.map (fun (e, v) -> e) translated))
+
+

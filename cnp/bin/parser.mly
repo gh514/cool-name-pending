@@ -11,7 +11,7 @@ let location = Parsing.symbol_start_pos;;
 %token TRUE FALSE
 %token GRID CROSS CELL REGION CENTRELINE EDGELINE CENTRELOOP EDGELOOP R C INTDEC BOOLDEC ROW COLUMN BOX CELLDEC
 %token ADD SUB MUL DIV ABS DIFF
-%token AND OR NOT XOR
+%token AND OR NOT XOR IF THEN ELSE
 %token EQUAL LT GT LTE GTE UNEQUAL MEMBER ADJACENT
 %token LEFTIMP RIGHTIMP BIIMP
 %token LBRACK RBRACK LSBRACK RSBRACK SEMICOLON POINT TO COMMA HALF
@@ -22,6 +22,7 @@ let location = Parsing.symbol_start_pos;;
 
 %nonassoc LOW
 
+%nonassoc IF THEN ELSE
 %left BIIMP
 %left LEFTIMP RIGHTIMP
 %left LT GT LTE GTE UNEQUAL EQUAL NOT
@@ -51,10 +52,11 @@ simple_expr:
     | FALSE                                 {Past.Boolean(location(), false)}
     | INT                                   {Past.Integer(location(), $1)}
     | VAR                                   {Past.Var(location(), $1)}
-    | R simple_expr C simple_expr           {Past.RC(location(), $2, $4)}
-    | simple_expr TO simple_expr            {Past.Range(location(), $1, $3)}
+    | R simple_expr C simple_expr %prec HIGH                        {Past.RC(location(), $2, $4)}
+    | simple_expr TO simple_expr %prec LOW           {Past.Range(location(), $1, $3)}
     | group                                 {Past.Group(location(), $1)}
     | simple_expr HALF                      {Past.Corner(location(), $1)}
+    | LBRACK expr RBRACK                    {$2}
 
 datatype:   
     | INTDEC                                {Past.Int}
@@ -105,9 +107,7 @@ constraints:
     | EQUIVALENT                            {Past.Equivalent}
 
 expr:
-    | expr utils                            {Past.Utils(location(), $1, $2)}
     | simple_expr                           {$1}
-    | LBRACK expr RBRACK                    {$2}
     | dec                                   {$1}
     | expr ADD expr                         {Past.Op(location(), $1, Past.Add, $3)}
     | expr SUB expr                         {Past.Op(location(), $1, Past.Sub, $3)}
@@ -119,6 +119,7 @@ expr:
     | expr AND expr                         {Past.Op(location(), $1, Past.And, $3)}
     | expr OR expr                          {Past.Op(location(), $1, Past.Or, $3)}
     | expr XOR expr                         {Past.Op(location(), $1, Past.Xor, $3)}
+    | IF expr THEN expr ELSE expr           {Past.ITE(location(), $2, $4, $6)}
     | NOT expr                              {Past.UnaryOp(location(), Past.Not, $2)}
     | expr EQUAL expr                       {Past.Op(location(), $1, Past.Equal, $3)}
     | expr LT expr                          {Past.Op(location(), $1, Past.LT, $3)}
@@ -129,6 +130,7 @@ expr:
     | expr LEFTIMP expr                     {Past.Op(location(), $1, Past.LeftImp, $3)}
     | expr RIGHTIMP expr                    {Past.Op(location(), $1, Past.RightImp, $3)}
     | expr BIIMP expr                       {Past.Op(location(), $1, Past.BiImp, $3)}
+    | expr utils                            {Past.Utils(location(), $1, $2)}
     | simple_expr ADJACENT simple_expr MEMBER simple_expr %prec HIGH  
                                             {Past.SpecOp(location(), $1, Past.Adjacent(Some $5), $3)}
     | simple_expr ADJACENT simple_expr %prec LOW     {Past.SpecOp(location(), $1, Past.Adjacent(None), $3)}
@@ -140,6 +142,8 @@ expr:
     | list MEMBER simple_expr               {Past.Member(location(), Past.List(location(), $1), $3)}
     | datatype MEMBER group ARE constraints {Past.Sugar(location(), $1, Past.Group(location(), $3), $5)}
     | CELLDEC expr                          {Past.CellDec(location(), $2)}
+
+
 
 init:
     | GRID INT CROSS INT                    {(location(), $2, $4)}

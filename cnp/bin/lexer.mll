@@ -51,10 +51,13 @@ rule token = parse
     | ("Abs")         {ABS}
     | ("True")        {TRUE}
     | ("False")       {FALSE}
-    | ("and")         {AND}
-    | ("or")          {OR}
-    | ("not")         {NOT}
-    | ("xor")         {XOR}
+    | ("And")         {AND}
+    | ("Or")          {OR}
+    | ("Not")         {NOT}
+    | ("Xor")         {XOR}
+    | ("If")          {IF}
+    | ("Then")        {THEN}
+    | ("Else")        {ELSE}
     | ('=')           {EQUAL}
     | ('<')           {LT}
     | ('>')           {GT}

@@ -29,6 +29,9 @@ type token =
   | OR
   | NOT
   | XOR
+  | IF
+  | THEN
+  | ELSE
   | EQUAL
   | LT
   | GT

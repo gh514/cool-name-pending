@@ -91,4 +91,5 @@ and expr =
   | Member of loc * expr * expr
   | Sugar of loc * data_type * expr * constraints
   | CellDec of loc * expr
+  | ITE of loc * expr * expr * expr
 
