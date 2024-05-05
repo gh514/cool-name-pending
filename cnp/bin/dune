@@ -1,7 +1,7 @@
 (executable
  (public_name cnp)
  (name lang)
- (libraries core str))
+ (libraries core str core_unix core_unix.sys_unix))
 
 (env
   (dev

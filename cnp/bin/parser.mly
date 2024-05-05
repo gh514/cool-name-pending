@@ -134,7 +134,7 @@ expr:
     | simple_expr ADJACENT simple_expr MEMBER simple_expr %prec HIGH  
                                             {Past.SpecOp(location(), $1, Past.Adjacent(Some $5), $3)}
     | simple_expr ADJACENT simple_expr %prec LOW     {Past.SpecOp(location(), $1, Past.Adjacent(None), $3)}
-    | expr ADJACENT CROSS INT expr          {Past.SpecOp(location(), $1, Past.CellLineAdjacent($4), $5)}
+    | simple_expr ADJACENT CROSS INT simple_expr          {Past.SpecOp(location(), $1, Past.CellLineAdjacent($4), $5)}
     | quantifier dec MEMBER group POINT LBRACK expr RBRACK
                                             {Past.Quantifier(location(), $1, $2, $4, $7)}
     | quantifier dec POINT LBRACK expr RBRACK

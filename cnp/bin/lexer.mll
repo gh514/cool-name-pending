@@ -79,7 +79,7 @@ rule token = parse
     | ("!Exists")     {NEXISTS}
     | ('.')           {POINT}
     | ("Size")        {SIZE}
-    | ("Length")      {LENGTH}
+    | ("Len")         {LENGTH}
     | ("Adj")         {ADJACENT}
     | ("Sum")         {SUM}
     | ("To")          {TO}

@@ -1,5 +1,6 @@
 
 include Core
+include Core_unix
 
 let file = "test.cnp"
 
@@ -26,7 +27,15 @@ let init_lexbuf file =
   in let _ = lexbuf.lex_curr_p <- { pos_fname = file; pos_lnum = 1; pos_bol = 0; pos_cnum = 0; }
   in lexbuf
 
+  let run cmd =
+    let inp = Core_unix.open_process_in cmd in
+    let r = In_channel.input_lines inp in
+    In_channel.close inp; r
+
 let _ = 
   let past_puzzle = Parser.main Lexer.token (init_lexbuf file) in
-    let ast_puzzle = Past_to_ast.convert past_puzzle in
-      Ast_to_smt_lib.translate ast_puzzle;
+  let ast_puzzle = Past_to_ast.convert past_puzzle in
+  let (dims, _) = ast_puzzle in
+  let _ = Ast_to_smt_lib.translate ast_puzzle in 
+  let solved = run "z3 puzzle.smt" in
+  Smt_lib_to_puzzle.revert dims solved

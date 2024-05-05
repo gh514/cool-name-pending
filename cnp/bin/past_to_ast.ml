@@ -665,6 +665,9 @@ and translate_dec d v e vars =
     | Past.Int -> (match e with
       | Some Past.Integer(_, i) -> (Ast.Bundle([Ast.Dec(Ast.Int, nv); Ast.Op(nv, Ast.Equal, Ast.Integer(i))]), (Past.Int, v1, e)::vars)
       | None -> (Ast.Dec(Ast.Int, nv), (Past.Int, v1, None)::vars))
+    | Past.Bool -> (match e with
+      | Some Past.Boolean(_, b) -> (Ast.Bundle([Ast.Dec(Ast.Bool, nv); nv]), (Past.Bool, v1, e)::vars)
+      | None -> (Ast.Dec(Ast.Bool, nv), (Past.Bool, v1, None)::vars))
     | Past.Cell -> (match e with 
       | None -> (Ast.Dead, (Past.Cell, v1, None)::vars))
     | Past.Region -> let init = [] in
@@ -889,9 +892,10 @@ let convert = function
       match exprs with
       | e::es -> let uninit_vars = scan_rc e vars in
         let uninit_group = scan_utils e vars in
-        let expr2 = replace_utils e uninit_group in
-        let expr = init_vars (get_loc e) vars expr2 uninit_vars in
-        let (_, nvars) = try translate_expr e vars with RegVar v -> (Ast.Dead, (Past.Region, v, None)::vars) in
+        (*
+        let expr2 = replace_utils e uninit_group in   *)
+        let expr = init_vars (get_loc e) vars e uninit_vars in
+        let (_, nvars) = try translate_expr e vars with RegVar v -> (Ast.Dead, (Past.Region, v, None)::vars) in (*possible bug*)
         (expr, nvars)::loop es nvars
       | [] -> []
     in let translated = loop xs []
