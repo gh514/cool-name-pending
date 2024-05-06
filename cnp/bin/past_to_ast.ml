@@ -670,7 +670,7 @@ and translate_dec d v e vars =
       | None -> (Ast.Dec(Ast.Bool, nv), (Past.Bool, v1, None)::vars))
     | Past.Cell -> (match e with 
       | None -> (Ast.Dead, (Past.Cell, v1, None)::vars))
-    | Past.Region -> let init = [] in
+    | Past.Region -> regions := true; let init = [] in
       (match e with
       | Some Past.Group(_, Past.Instance(Past.List(_, l))) -> define_region l init v1 vars
       | Some Past.Var(l, v2) -> let (dt, expr) = safe_find (Past.Var(l, v2)) vars 
@@ -769,18 +769,25 @@ and translate_list ls vars =
   in (Ast.Bundle(loop ls), vars)
 
 and translate_member e1 e2 vars = 
-  let (Ast.Var(v2), vars2) = translate_expr e2 vars
-  in match e1 with
-    | Past.List(_, l) -> 
-      (let rec var_loop vars3 = function
-        | e::es -> let (_, vars1) = translate_expr e vars3 in var_loop vars1 es
-        | [] -> vars
-      in let rec loop = function
-        | e::es -> let (Ast.Var(v1), _) = translate_expr e vars in
-          (Ast.Var(sprintf "%s_%s" v2 v1)) :: (loop es)
-        | [] -> []
-      in (Ast.Bundle(loop l), var_loop vars2 l))
-    | _ -> let (Ast.Var(v1), _) = translate_expr e1 vars in (Ast.Var(sprintf "%s_%s" v2 v1), vars2)
+  let base = (let (Ast.Var(v2), vars2) = translate_expr e2 vars
+in match e1 with
+  | Past.List(_, l) -> 
+    (let rec var_loop vars3 = function
+      | e::es -> let (_, vars1) = translate_expr e vars3 in var_loop vars1 es
+      | [] -> vars
+    in let rec loop = function
+      | e::es -> let (Ast.Var(v1), _) = translate_expr e vars in
+        (Ast.Var(sprintf "%s_%s" v2 v1)) :: (loop es)
+      | [] -> []
+    in (Ast.Bundle(loop l), var_loop vars2 l))
+  | _ -> let (Ast.Var(v1), _) = translate_expr e1 vars in (Ast.Var(sprintf "%s_%s" v2 v1), vars2))
+  in
+  match e2 with
+    | Past.Var(_, v2) -> let (dt, Some (Past.List(_, box))) = safe_find e2 vars in if dt = Past.Box then 
+      let (Past.RC(_, Past.Integer(_, r), Past.Integer(_, c))) = e1 in 
+      (Ast.Boolean(List.mem (r, c) (List.map (fun (Past.RC(_, Past.Integer(_, r), Past.Integer(_, c))) -> (r, c)) box)), vars)
+      else base 
+    | _ -> base
 
 and translate_sugar dt e c vars =
   let con = match c with 
@@ -845,18 +852,23 @@ and translate_expr e vars =
   | Past.Group(_) -> raise (Err "Unexpected group")
 
 let init_named_regions vars =
+  let cells = get_cells 0 in
   let rec unpack ls = match ls with
     | e::es -> (get_rc e vars)::(unpack es)
     | [] -> []
   in let rec loop = function
     | (Past.Region, Past.Var(_, v), None)::es -> 
-      (List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" v r c))) (get_cells 0))@(loop es)
+      (List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" v r c))) cells)
+      @(Ast.MultiOp(Ast.Or, List.map (fun (r, c) -> Ast.Var(sprintf "%s_r%ic%i" v r c)) cells)::(loop es))
     | (Past.Region, Past.Var(_, v), Some (Past.List(_, l)))::es -> 
       (List.map (fun (r, c) -> Ast.Dec(Ast.Bool, Ast.Var(sprintf "%s_r%ic%i" v r c))) (get_cells 0))
       @ (List.map (fun (r, c) -> Ast.Var(sprintf "%s_r%ic%i" v r c)) (unpack l))@(loop es)
     | _::es -> loop es
     | [] -> []
-  in loop vars
+  in let regions = List.filter (fun (dt, _, _) -> dt = Past.Region) vars
+  in loop vars @ (if List.length regions > 0 then List.map (fun (r, c) -> Ast.Op(Ast.MultiOp(Ast.Add, 
+    List.map (fun (_, Past.Var(_, v), _) -> Ast.ITE(Ast.Var(sprintf "%s_r%ic%i" v r c), Ast.Integer(1), Ast.Integer(0))) regions),
+    Ast.LTE, Ast.Integer(1))) cells else [])
 
 let rec clean = function
   | Ast.Op(e1, _, e2) -> clean e1 && clean e2
@@ -892,20 +904,22 @@ let convert = function
       match exprs with
       | e::es -> let uninit_vars = scan_rc e vars in
         let uninit_group = scan_utils e vars in
-        (*
-        let expr2 = replace_utils e uninit_group in   *)
-        let expr = init_vars (get_loc e) vars e uninit_vars in
+        
+        let expr2 = replace_utils e uninit_group in   
+        let expr = init_vars (get_loc e) vars e uninit_vars in (*fix*)
         let (_, nvars) = try translate_expr e vars with RegVar v -> (Ast.Dead, (Past.Region, v, None)::vars) in (*possible bug*)
         (expr, nvars)::loop es nvars
       | [] -> []
     in let translated = loop xs []
     in let (_, vars) = List.nth translated ((List.length translated)-1)
-    in let find_reg vars =
+    in let find_reg vars = if !regions then Ast.Bundle((init_regions ())@(init_named_regions vars)) else Ast.Dead
+    (*
       let rec loop = function
         | (Past.Region, _, _)::_ -> Ast.Bundle((init_regions ())@(init_named_regions vars))
         | _::vs -> loop vs
         | _ -> Ast.Dead
       in loop vars
-    in ((r, c), flatten ((find_reg vars)::List.map (fun (e, v) -> e) translated))
+    *)
+    in ((r, c), flatten ((find_reg vars)::List.map (fun (e, v) -> e) translated), vars)
 
 

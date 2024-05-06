@@ -87,7 +87,7 @@ let translate p =
   out "(set-logic QF_LIA)\n";
 
   match p with
-    | ((r, c), xs) -> init_grid r c c;
+    | ((r, c), xs, _) -> init_grid r c c;
       let rec loop = function
         | e::es -> (match e with
           | Ast.Dec(_, _) -> nl(); translate_expr e; loop es
