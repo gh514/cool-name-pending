@@ -3,6 +3,7 @@ include Printf
 
 exception Err of string
 exception RegVar of Past.expr
+exception RCErr 
 exception UndecVar
 exception Internal
 exception NotVar
@@ -10,6 +11,26 @@ exception NotVar
 let gridr = ref 0
 let gridc = ref 0
 let regions = ref false
+
+let fing_expr_type = function
+  | Past.Integer(l, _) -> raise (Err "int")
+  | Past.Boolean(l, _) -> raise (Err "bool")
+  | Past.RC(l, _, _) -> raise (Err "rc")
+  | Past.Var(l, _) -> raise (Err "var")
+  | Past.Op(l, _, _, _) -> raise (Err "op")
+  | Past.UnaryOp(l, _, _) -> raise (Err "unary")
+  | Past.SpecOp(l, _, _, _) -> raise (Err "spec")
+  | Past.Dec(l, _, _, _) -> raise (Err "dec")
+  | Past.Assign(l, _, _) -> raise (Err "assign")
+  | Past.Utils(l, _, _) -> raise (Err "utils")
+  | Past.Quantifier(l, _, _, _, _) -> raise (Err "quantifier")
+  | Past.List(l, _) -> raise (Err "list")
+  | Past.Group(l, _) -> raise (Err "group")
+  | Past.Range(l, _, _) -> raise (Err "range")
+  | Past.Member(l, _, _) -> raise (Err "member")
+  | Past.Sugar(l, _, _, _) -> raise (Err "sugar")
+  | Past.CellDec(l, _) -> raise (Err "celldec")
+  | Past.ITE(l, _, _, _) -> raise (Err "ite")
 
 let translate_op = function
   | Past.Add -> Ast.Add
@@ -47,7 +68,7 @@ let get_loc = function
   | Past.Quantifier(l, _, _, _, _) -> l
   | Past.List(l, _) -> l
   | Past.Group(l, _) -> l
-  | Past.Range(l, _, _)
+  | Past.Range(l, _, _) -> l
   | Past.Member(l, _, _) -> l
   | Past.Sugar(l, _, _, _) -> l
   | Past.CellDec(l, _) -> l
@@ -371,19 +392,24 @@ and unpack_line = function
   | e::es -> (unpack_range e) :: (unpack_line es)
   | [] -> []
 
+let rec repack_line line : ((int * int) * (int * int)) list = match line with
+  | rc1::rc2::ls -> (rc1, rc2)::repack_line (rc2::ls)
+  | _ -> []
+
 let rec pair = function
   | rc1::rc2::xs -> (rc1, rc2) :: (rc2, rc1) :: (pair (rc2::xs))
   | _ -> []
 
 let translate_centreline l v vars =
   let past_lines = unpack_line l
-  in let lines = List.map (List.map (fun rc -> get_rc rc vars)) past_lines
+  in let lines = List.concat_map (List.map (fun rc -> get_rc rc vars)) past_lines
   in let (adj_lines, _) = create_linevars 0
-  in (List.map (fun (r, c) -> let t = Ast.Var(sprintf "%s_r%ic%i" v r c)
-    in if List.mem (r, c) (List.concat lines) then t else Ast.UnaryOp(Ast.Not, t)) (get_cells 0)
+  in List.map (fun (r, c) -> let t = Ast.Var(sprintf "%s_r%ic%i" v r c)
+    in if List.mem (r, c) (lines) then t else Ast.UnaryOp(Ast.Not, t)) (get_cells 0)
     @ List.map (fun ((r1, c1), (r2, c2)) -> (let t = Ast.Var(sprintf "%s_r%ic%itor%ic%i" v r1 c1 r2 c2)
-    in if List.mem ((r1, c1), (r2, c2)) (List.concat_map pair lines) then t else Ast.UnaryOp(Ast.Not, t))) adj_lines, 
-      Past.List(get_loc (List.hd l), List.map (fun (rc1, rc2) -> Past.Range(get_loc rc1, rc1, rc2)) (List.concat_map pair past_lines)))
+    in if List.mem ((r1, c1), (r2, c2)) (repack_line lines) then t else Ast.UnaryOp(Ast.Not, t))) 
+      (List.concat_map (fun (rc1, rc2) -> [(rc1, rc2); (rc2, rc1)]) adj_lines), 
+      Past.List(get_loc (List.hd l), List.map (fun (rc1, rc2) -> Past.Range(get_loc rc1, rc1, rc2)) (List.concat_map pair past_lines))
 
 let translate_edgeline l v vars =
   let past_lines = unpack_line l
@@ -591,12 +617,14 @@ let rec store_vars dt vars = function
   | [] -> vars
 
 let translate_rc r c vars = 
-  let f e = match e with
+  let f e = eval_num e vars
+    (*
+    match e with
     | Past.Integer(_, i) -> i
     | Past.Var(_) -> let (_, e1) = safe_find e vars in
       (match e1 with
         | Some (Past.Integer(_, i)) -> i
-        | None -> raise (Err "RC Error"))
+        | None -> raise RCErr)  *)
   in (Ast.Var(sprintf "r%ic%i" (f r) (f c)), vars)
 
 let rec translate_term e1 op e2 vars =
@@ -770,23 +798,26 @@ and translate_list ls vars =
 
 and translate_member e1 e2 vars = 
   let base = (let (Ast.Var(v2), vars2) = translate_expr e2 vars
-in match e1 with
-  | Past.List(_, l) -> 
-    (let rec var_loop vars3 = function
-      | e::es -> let (_, vars1) = translate_expr e vars3 in var_loop vars1 es
-      | [] -> vars
-    in let rec loop = function
-      | e::es -> let (Ast.Var(v1), _) = translate_expr e vars in
-        (Ast.Var(sprintf "%s_%s" v2 v1)) :: (loop es)
-      | [] -> []
-    in (Ast.Bundle(loop l), var_loop vars2 l))
-  | _ -> let (Ast.Var(v1), _) = translate_expr e1 vars in (Ast.Var(sprintf "%s_%s" v2 v1), vars2))
-  in
-  match e2 with
-    | Past.Var(_, v2) -> let (dt, Some (Past.List(_, box))) = safe_find e2 vars in if dt = Past.Box then 
-      let (Past.RC(_, Past.Integer(_, r), Past.Integer(_, c))) = e1 in 
-      (Ast.Boolean(List.mem (r, c) (List.map (fun (Past.RC(_, Past.Integer(_, r), Past.Integer(_, c))) -> (r, c)) box)), vars)
-      else base 
+    in match e1 with
+      | Past.List(_, l) -> 
+        (let rec var_loop vars3 = function
+          | e::es -> let (_, vars1) = translate_expr e vars3 in var_loop vars1 es
+          | [] -> vars
+        in let rec loop = function
+          | e::es -> let (Ast.Var(v1), _) = translate_expr e vars in
+            (Ast.Var(sprintf "%s_%s" v2 v1)) :: (loop es)
+          | [] -> []
+        in (Ast.Bundle(loop l), var_loop vars2 l))
+      | _ -> let (Ast.Var(v1), _) = translate_expr e1 vars in (Ast.Var(sprintf "%s_%s" v2 v1), vars2))
+        in match e2 with
+          | Past.Var(_, v2) -> let (dt, Some (Past.List(_, box))) = safe_find e2 vars in if dt = Past.Box then 
+
+            
+              let (Past.List(_, [Past.RC(_, Past.Integer(_, r), Past.Integer(_, c))])) = e1 in 
+              (Ast.Boolean(List.mem (r, c) (List.map (fun (Past.RC(_, Past.Integer(_, r), Past.Integer(_, c))) -> (r, c)) box)), vars)
+            
+            
+            else base 
     | _ -> base
 
 and translate_sugar dt e c vars =
@@ -904,10 +935,11 @@ let convert = function
       match exprs with
       | e::es -> let uninit_vars = scan_rc e vars in
         let uninit_group = scan_utils e vars in
-        
         let expr2 = replace_utils e uninit_group in   
         let expr = init_vars (get_loc e) vars e uninit_vars in (*fix*)
-        let (_, nvars) = try translate_expr e vars with RegVar v -> (Ast.Dead, (Past.Region, v, None)::vars) in (*possible bug*)
+        let (_, nvars) = try translate_expr e vars with
+          | RegVar v -> (Ast.Dead, (Past.Region, v, None)::vars)
+          | RCErr -> (Ast.Dead, vars) in (*possible bug*)
         (expr, nvars)::loop es nvars
       | [] -> []
     in let translated = loop xs []

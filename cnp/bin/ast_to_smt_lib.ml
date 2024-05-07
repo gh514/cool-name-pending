@@ -19,7 +19,7 @@ let translate_op = function
   | Ast.Add -> out "(+" 
   | Ast.Sub -> out "(-"
   | Ast.Mul -> out "(*"
-  | Ast.Div -> out "(/"
+  | Ast.Div -> out "(div"
   | Ast.And -> out "(and"
   | Ast.Or -> out "(or"
   | Ast.Xor -> out "(xor"

@@ -12,6 +12,7 @@ let cell_regex = Str.regexp (cell ^ "$")
 let region_regex = Str.regexp (cell ^ "_root$")
 let named_region_regex = Str.regexp (".*_" ^ cell ^ "$")
 let line_regex = Str.regexp (".*_" ^ cell ^ "to" ^ cell) 
+let source_regex = Str.regexp (".*_source$")
 let nums = "[0-9]+"
 let int_regex = Str.regexp nums
 let negative_regex = Str.regexp ("- " ^ nums)
@@ -55,19 +56,19 @@ let rec get_dt v vars =
     | [] -> raise (Err "variable not found")
   in loop vars
 *)
-let rec display = function
-  | cell::ls -> out "%s\n" cell; display ls
-  | [] -> ()
 
 let get_regions (r, c) vars regions =
-  if List.length regions > 0 then let named_regions = List.filter (fun (v, _) -> Str.string_match named_region_regex v 0) vars
+  let rec display = function
+    | cell::ls -> out "%s\n" cell; display ls
+    | [] -> ()
+  in if List.length regions > 0 then let named_regions = List.filter (fun (v, _) -> Str.string_match named_region_regex v 0) vars
     in let group_named_regions v = 
       let rec loop = function
-        | (var, BoolVar(b))::ls -> Printf.printf "%s %b\n" var b; if Str.string_match (Str.regexp v) var 0 && b then 
+        | (var, BoolVar(b))::ls -> if Str.string_match (Str.regexp v) var 0 && b then 
           get_end var::loop ls else loop ls
         | [] -> []
       in loop named_regions
-    in let named_region_groups = List.map (fun v -> (v, (Printf.printf "%i" (List.length (group_named_regions v)); group_named_regions v))) (regions)
+    in let named_region_groups = List.map (fun v -> (v, group_named_regions v)) (regions)
     in if List.length named_region_groups > 0 then 
       (out "Regions:"; List.map (fun (v, vs) -> out "\n%s:\n" v; display vs) named_region_groups)
     else []
@@ -87,19 +88,38 @@ let get_regions (r, c) vars regions =
     false (let (names, _) = List.split vars in names))*)
 
 
-let get_lines (r, c) vars lines = 2
-(*  let line_segments = List.filter (fun (v, _) -> Str.string_match line_regex v 0) vars
-  in let to_cells = List.map (fun (v, _) -> let str = get_end v in 
-    let i = (String.index_from str 0 't') in
-    List.map (fun s -> (let _ = Str.search_forward int_regex s 0 in int_of_string (Str.matched_string s)), 
-      let _ = Str.search_backward int_regex s (String.length s) in  int_of_string (Str.matched_string s))
-      [String.sub str 0 i; String.sub str (i+2) ((String.length str)-i-2)]) line_segments
-  in let source = List.hd (List.filter )
-  
-  let rec order = function
-    | 
-*)
-
+let get_lines (r, c) vars lines = 
+  if List.length lines > 0 then
+      let line_segments = List.filter (fun (v, _) -> Str.string_match line_regex v 0) vars
+      in let extract_rc str = 
+        let i = (String.index_from str 0 't') 
+        in let separate s = ((let _ = Str.search_forward int_regex s 0 in int_of_string (Str.matched_string s)), 
+          let _ = Str.search_backward int_regex s (String.length s) in int_of_string (Str.matched_string s))
+        in (separate (String.sub str 0 i), separate (String.sub str (i+2) ((String.length str)-i-2)))
+      in let to_cells = List.filter_map (fun (v, BoolVar(b)) -> if b then Some (extract_rc (get_end v)) else None) line_segments
+      in let source = List.hd (List.tl (String.split_on_char '_' 
+        (List.hd (List.filter_map (fun (v, b) -> 
+          if Str.string_match source_regex v 0 then (match b with
+            | BoolVar(b) -> (if b then Some v else None)
+            | _ -> None)
+          else None) vars))))
+      in let source_rc = (let _ = Str.search_forward int_regex source 0 in int_of_string (Str.matched_string source),
+        let _ = Str.search_backward int_regex source (String.length source) in  int_of_string (Str.matched_string source))
+      in let rec order line segments =
+        let rec loop = function
+          | (p, c)::ls -> if p = List.hd line then order (c::line) (List.filter (fun (sp, sc) -> sp != List.hd line) segments)
+            else loop ls
+          | [] -> line
+        in loop segments
+      in let rec display = function
+        | (r, c)::rc2::ls -> Printf.printf "r%ic%i To " r c; display (rc2::ls)
+        | [(r, c)] -> Printf.printf "r%ic%i" r c
+        | _ -> raise (Err "Error printing line")
+    in display (List.rev (order [source_rc] to_cells))
+  else ()
+    (*
+  in order [source_rc] to_cells
+  *)
 (*
 let rec get_bool = function
   | (v, x)::ls -> (match x with
@@ -124,7 +144,7 @@ let revert dims model named_vars =
     | (_, Past.Var(_, v), _)::ls -> sort ints bools cells regions (v::lines) boxes ls
     | [] -> (ints, bools, cells, regions, lines, boxes)
   in let (ints, bools, cells, regions, lines, boxes) = sort [] [] [] [] [] [] named_vars
-  in let _ = List.map (fun s -> Printf.printf "%s\n" s) model in () ;
+  in let _ = List.map (fun s -> Printf.printf "%s\n" s) model in Printf.printf "\n";
   if List.hd model = "unsat" then raise (Err "Puzzle is unsolvable")
   else let get_values s = Str.split (Str.regexp " +") s  
   in let rec unpack = function
@@ -132,8 +152,9 @@ let revert dims model named_vars =
     | _ -> []
   in let all_vars = get_vars (unpack (List.tl (List.tl model)))
   in let cells = extract cell_regex all_vars
+  in let _ = List.map (fun (v, IntVar(x)) -> Printf.printf "%s = %i\n" v x) cells
   in let _ = get_regions dims all_vars regions
-  in let _ = get_lines dims all_vars in ()
+  in let _ = get_lines dims all_vars lines in 4
 (*
 
   in List.map (fun (x, v) -> Printf.printf "%s" x; match v with
