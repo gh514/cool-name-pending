@@ -11,11 +11,12 @@ let cell = "r[0-9]+c[0-9]+"
 let cell_regex = Str.regexp (cell ^ "$")
 let region_regex = Str.regexp (cell ^ "_root$")
 let named_region_regex = Str.regexp (".*_" ^ cell ^ "$")
-let line_regex = Str.regexp (".*_" ^ cell ^ "to" ^ cell) 
-let source_regex = Str.regexp (".*_source$")
-let nums = "[0-9]+"
-let int_regex = Str.regexp nums
-let negative_regex = Str.regexp ("- " ^ nums)
+let line_regex = Str.regexp (".*_" ^ cell ^ "to" ^ cell)
+let edgeline_regex = Str.regexp ".*_r[0-9]+.5c[0-9]+.5tor[0-9]+.5c[0-9]+.5"
+let source_regex = Str.regexp ".*_source$"
+let int_regex = Str.regexp "[0-9]+"
+let corner_regex = Str.regexp "[0-9]+.5"
+let negative_regex = Str.regexp "- [0-9]+"
 let true_regex = Str.regexp ".*true)"
 let false_regex = Str.regexp ".*false)"
 
@@ -26,7 +27,7 @@ let get_vars =
   let match_bool s = 
     if Str.string_match true_regex s 0 then BoolVar(true)
     else if Str.string_match false_regex s 0 then BoolVar(false)
-    else raise (Err "Internal error")
+    else raise (Err s)
   in List.map (fun (v, x) -> let z = List.hd (List.tl v)
   in (z, (try let _ = Str.search_forward int_regex x 0 in 
     (let i = int_of_string (Str.matched_string x) in
@@ -89,35 +90,65 @@ let get_regions (r, c) vars regions =
 
 
 let get_lines (r, c) vars lines = 
-  if List.length lines > 0 then
-      let line_segments = List.filter (fun (v, _) -> Str.string_match line_regex v 0) vars
+  let rec store (v, x) vs =
+    let rec loop = function
+      | (var, ls)::rest -> if Str.string_match (Str.regexp (var ^ "_.+")) v 0 then (var, (v, x)::ls)::rest
+        else (var, ls)::loop rest
+      | [] -> let s = List.hd (String.split_on_char '_' v) in if List.mem s lines 
+        then [(s, [(v, x)])]
+        else []
+    in loop vs
+
+  in let rec split_vars groups = function
+    | var::ls -> split_vars (store var groups) ls
+    | [] -> groups
+
+  in let handle_edges s = 
+    let l = String.split_on_char '.' s
+    in if List.length l = 1 then s else List.nth l ((List.length l)-2)
+
+  in let print_line vs = 
+    if List.length lines > 0 then
+        let line_segments = List.filter (fun (v, _) -> Str.string_match line_regex v 0 || Str.string_match edgeline_regex v 0) vs
       in let extract_rc str = 
-        let i = (String.index_from str 0 't') 
-        in let separate s = ((let _ = Str.search_forward int_regex s 0 in int_of_string (Str.matched_string s)), 
-          let _ = Str.search_backward int_regex s (String.length s) in int_of_string (Str.matched_string s))
-        in (separate (String.sub str 0 i), separate (String.sub str (i+2) ((String.length str)-i-2)))
-      in let to_cells = List.filter_map (fun (v, BoolVar(b)) -> if b then Some (extract_rc (get_end v)) else None) line_segments
-      in let source = List.hd (List.tl (String.split_on_char '_' 
-        (List.hd (List.filter_map (fun (v, b) -> 
-          if Str.string_match source_regex v 0 then (match b with
-            | BoolVar(b) -> (if b then Some v else None)
-            | _ -> None)
-          else None) vars))))
-      in let source_rc = (let _ = Str.search_forward int_regex source 0 in int_of_string (Str.matched_string source),
-        let _ = Str.search_backward int_regex source (String.length source) in  int_of_string (Str.matched_string source))
-      in let rec order line segments =
-        let rec loop = function
-          | (p, c)::ls -> if p = List.hd line then order (c::line) (List.filter (fun (sp, sc) -> sp != List.hd line) segments)
-            else loop ls
-          | [] -> line
-        in loop segments
-      in let rec display = function
-        | (r, c)::rc2::ls -> Printf.printf "r%ic%i To " r c; display (rc2::ls)
-        | [(r, c)] -> Printf.printf "r%ic%i" r c
-        | _ -> raise (Err "Error printing line")
-    in display (List.rev (order [source_rc] to_cells))
-  else ()
-    (*
+          let i = (String.index_from str 0 't') 
+          in let separate s = ((let _ = Str.search_forward int_regex s 0 in int_of_string (Str.matched_string s)), 
+            let num = handle_edges s in
+            let _ = Str.search_backward int_regex num ((String.length num)) in int_of_string (Str.matched_string num))
+          in (separate (String.sub str 0 i), separate (String.sub str (i+2) ((String.length str)-i-2)))
+        in let to_cells = List.filter_map (fun (v, BoolVar(b)) -> if b then Some (extract_rc (get_end v)) else None) line_segments
+      in
+        let source = List.hd (List.tl (String.split_on_char '_' 
+          (List.hd (List.filter_map (fun (v, b) -> 
+            if Str.string_match source_regex v 0 then (match b with
+              | BoolVar(b) -> (if b then Some v else None)
+              | _ -> None)
+            else None) vs))))
+          
+        in let source_rc = (let _ = Str.search_forward int_regex source 0 in let z = (Str.matched_string source) in int_of_string z,
+          let num = handle_edges source in
+          let _ = Str.search_backward int_regex num ((String.length num)) in  int_of_string (Str.matched_string num))
+        in let rec order line segments =
+          let rec loop = function
+            | (p, c)::ls -> if p = List.hd line then order (c::line) (List.filter (fun (sp, sc) -> sp != List.hd line) segments)
+              else loop ls
+            | [] -> line
+          in loop segments
+        in let display offset list= 
+          let rec loop = function
+          | (r, c)::rc2::ls -> Printf.printf "r%i%sc%i%s To " r offset c offset; loop (rc2::ls)
+          | [(r, c)] -> Printf.printf "r%i%sc%i%s" r offset c offset
+          | _ -> raise (Err "Error printing line")
+        in loop list
+      in display (try let t  = Str.search_forward (Str.regexp "\.") source 0 in ".5" with Not_found _ -> "")
+       (List.rev (order [source_rc] to_cells)); Printf.printf "\n"
+    else ()
+  in List.map (fun (v, ls) -> Printf.printf "Line %s:\n" v; print_line ls) (split_vars [] vars)
+  (*
+  List.map (fun (v, ls) -> Printf.printf "\n"; List.map (fun (var, _) -> Printf.printf "%s\n" var) ls) (split_vars [] vars)
+  *)
+
+  (*
   in order [source_rc] to_cells
   *)
 (*
@@ -152,9 +183,9 @@ let revert dims model named_vars =
     | _ -> []
   in let all_vars = get_vars (unpack (List.tl (List.tl model)))
   in let cells = extract cell_regex all_vars
-  in let _ = List.map (fun (v, IntVar(x)) -> Printf.printf "%s = %i\n" v x) cells
-  in let _ = get_regions dims all_vars regions
-  in let _ = get_lines dims all_vars lines in 4
+  in let _ = List.map (fun (v, IntVar(x)) -> Printf.printf "%s = %i\n" v x) cells 
+  in Printf.printf "\n"; let _ = get_regions dims all_vars regions
+  in let _ = get_lines dims all_vars lines in ()
 (*
 
   in List.map (fun (x, v) -> Printf.printf "%s" x; match v with
