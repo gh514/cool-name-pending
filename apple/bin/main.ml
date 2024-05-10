@@ -34,7 +34,7 @@ let init_lexbuf file =
 let _ = 
   let past_puzzle = Parser.main Lexer.token (init_lexbuf file) in
   let ast_puzzle = Past_to_ast.convert past_puzzle in
-  let (dims, _, vars) = ast_puzzle in
+  let (dims, _, vars) = ast_puzzle in 
   let _ = Ast_to_smt_lib.translate ast_puzzle in 
   let solved = run "z3 translated.smt" in
   Smt_lib_to_puzzle.revert dims solved vars

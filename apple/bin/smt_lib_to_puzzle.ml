@@ -46,8 +46,8 @@ let extract regex vars =
 let reorder (row, col) vars = 
   let indexed_vars = List.map (fun (rc, x) -> 
     ((let _ = Str.search_forward int_regex rc 0 in let z = (Str.matched_string rc) in int_of_string z,
-    let _ = Str.search_backward int_regex rc ((String.length rc)) in int_of_string (Str.matched_string rc)), (rc, x))) vars
-  in let rec find r1 c1 past z = match z with
+      int_of_string (List.hd (List.tl (String.split_on_char 'c' rc)))), (rc, x))) vars
+  in let rec find r1 c1 past z = if r1 > 11 then [] else match z with
     | ((r2, c2), v)::ls -> (if r1 = r2 && c2 = c1 + 1 then (v::(find r1 (c1 + 1) [] (past@ls)))
       else if c1 = col then find (r1+1) 0 [] (past@z)
       else find r1 c1 (((r2, c2), v)::past) ls)
@@ -167,11 +167,11 @@ let revert dims model named_vars =
     | f::v::ls -> (get_values f, v)::unpack ls
     | _ -> []
   in let all_vars = get_vars (unpack (List.tl (List.tl model)))
-  in let cells = extract cell_regex all_vars
-  in let _ = List.map (fun (v, IntVar(x)) -> Printf.printf "%s = %i\n" v x) (reorder dims cells)
+  in let cells = extract cell_regex all_vars 
+  
+  in let _ = List.map (fun (v, IntVar(x)) -> Printf.printf "%s = %i\n" v x) (reorder dims cells) 
   in Printf.printf "\n"; let _ = get_regions dims all_vars regions
   in let _ = get_lines dims all_vars lines 
   in let _ = List.map (fun v -> Printf.printf "%s = %i\n" v (let IntVar(i) = List.assoc v all_vars in i)) ints
   in List.map (fun v -> Printf.printf "%s = %b\n" v (let BoolVar(b) = List.assoc v all_vars in b)) bools
-  
   
