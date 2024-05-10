@@ -1,0 +1,8 @@
+(executable
+ (public_name apple)
+ (name main)
+ (libraries core str core_unix core_unix.sys_unix))
+
+(env
+  (dev
+    (flags (:standard -warn-error -A))))
